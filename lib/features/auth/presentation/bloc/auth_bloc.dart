@@ -1,5 +1,9 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/notification_service.dart';
+import '../../data/datasources/auth_remote_datasource.dart';
 
 // Events
 abstract class AuthEvent extends Equatable {
@@ -71,6 +75,9 @@ class AuthError extends AuthState {
 
 // Bloc
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  final AuthRemoteDataSource _authRemoteDataSource =
+      AuthRemoteDataSourceImpl(sl<ApiClient>());
+
   AuthBloc() : super(AuthInitial()) {
     on<LoginRequested>(_onLoginRequested);
     on<RegisterRequested>(_onRegisterRequested);
@@ -83,14 +90,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     try {
-      // TODO: Implementează logica reală de autentificare
-      await Future.delayed(const Duration(seconds: 1));
-      emit(AuthAuthenticated(
-        userName: 'Utilizator Demo',
-        email: event.email,
-      ));
+      final response = await _authRemoteDataSource.login(event.email, event.password);
+      final token = response['token'] as String?;
+      if (token != null && token.isNotEmpty) {
+        // Pornește verificarea periodică a notificărilor
+        NotificationService.startPeriodicCheck();
+
+        emit(AuthAuthenticated(
+          userName: response['userName'] ?? 'Utilizator',
+          email: event.email,
+        ));
+      } else {
+        emit(const AuthError('Email sau parolă incorectă!'));
+      }
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError('Eroare la autentificare: ${e.toString()}'));
     }
   }
 
@@ -116,8 +130,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading());
+    // Oprește verificarea periodică și curăță notificările
+    NotificationService.stopPeriodicCheck();
+    await NotificationService.clearShownNotifications();
     await Future.delayed(const Duration(milliseconds: 500));
     emit(AuthUnauthenticated());
   }
 }
-

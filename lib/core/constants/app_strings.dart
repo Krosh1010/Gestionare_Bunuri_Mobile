@@ -73,7 +73,7 @@ class AppStrings {
   static const String categoryElectronics = 'Electronică';
   static const String categoryFurniture = 'Mobilier';
   static const String categoryVehicles = 'Vehicule';
-  static const String categoryEquipment = 'Echipamente';
+  static const String categoryDocuments = 'Documente';
   static const String categoryOther = 'Altele';
 
   // Status
@@ -82,4 +82,3 @@ class AppStrings {
   static const String statusDecommissioned = 'Casat';
   static const String statusTransferred = 'Transferat';
 }
-

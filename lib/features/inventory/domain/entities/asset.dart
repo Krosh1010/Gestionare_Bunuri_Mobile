@@ -2,36 +2,75 @@ import 'package:equatable/equatable.dart';
 
 enum AssetStatus { active, inRepair, decommissioned, transferred }
 
-enum AssetCategory { electronics, furniture, vehicles, equipment, other }
+enum AssetCategory { electronics, furniture, vehicles, documents, other }
+
+// warrantyStatus from API: 0=active, 1=expiredSoon, 2=expired, null=unknown
+enum WarrantyStatus { active, expiringSoon, expired, unknown }
+
+// insuranceStatus from API: 0=notStarted, 1=active, 2=expiringSoon, 3=expired, null=unknown
+enum InsuranceStatus { notStarted, active, expiringSoon, expired, unknown }
 
 class Asset extends Equatable {
   final String id;
   final String name;
   final String? description;
-  final String? serialNumber;
   final AssetCategory category;
   final AssetStatus status;
-  final String location;
   final double value;
   final DateTime purchaseDate;
-  final DateTime? lastUpdated;
-  final String? assignedTo;
-  final String? imageUrl;
+  final DateTime? createdAt;
+  final int? spaceId;
+  final String? spaceName;
+
+  // Warranty
+  final WarrantyStatus warrantyStatus;
+  final DateTime? warrantyStartDate;
+  final DateTime? warrantyEndDate;
+  final String? warrantyProvider;
+
+  // Insurance
+  final InsuranceStatus insuranceStatus;
+  final DateTime? insuranceStartDate;
+  final DateTime? insuranceEndDate;
+  final String? insuranceCompany;
+  final double? insuranceValue;
 
   const Asset({
     required this.id,
     required this.name,
     this.description,
-    this.serialNumber,
     required this.category,
-    required this.status,
-    required this.location,
+    this.status = AssetStatus.active,
     required this.value,
     required this.purchaseDate,
-    this.lastUpdated,
-    this.assignedTo,
-    this.imageUrl,
+    this.createdAt,
+    this.spaceId,
+    this.spaceName,
+    this.warrantyStatus = WarrantyStatus.unknown,
+    this.warrantyStartDate,
+    this.warrantyEndDate,
+    this.warrantyProvider,
+    this.insuranceStatus = InsuranceStatus.unknown,
+    this.insuranceStartDate,
+    this.insuranceEndDate,
+    this.insuranceCompany,
+    this.insuranceValue,
   });
+
+  // Convenience getters
+  String get location => spaceName ?? 'Neatribuit';
+
+  int? get warrantyDaysLeft {
+    if (warrantyEndDate == null) return null;
+    final days = warrantyEndDate!.difference(DateTime.now()).inDays;
+    return days > 0 ? days : 0;
+  }
+
+  int? get insuranceDaysLeft {
+    if (insuranceEndDate == null) return null;
+    final days = insuranceEndDate!.difference(DateTime.now()).inDays;
+    return days > 0 ? days : 0;
+  }
 
   String get statusLabel {
     switch (status) {
@@ -54,10 +93,38 @@ class Asset extends Equatable {
         return 'Mobilier';
       case AssetCategory.vehicles:
         return 'Vehicule';
-      case AssetCategory.equipment:
-        return 'Echipamente';
+      case AssetCategory.documents:
+        return 'Documente';
       case AssetCategory.other:
         return 'Altele';
+    }
+  }
+
+  String get warrantyStatusLabel {
+    switch (warrantyStatus) {
+      case WarrantyStatus.active:
+        return 'Activă';
+      case WarrantyStatus.expiringSoon:
+        return 'Expiră curând';
+      case WarrantyStatus.expired:
+        return 'Expirată';
+      case WarrantyStatus.unknown:
+        return 'Necunoscută';
+    }
+  }
+
+  String get insuranceStatusLabel {
+    switch (insuranceStatus) {
+      case InsuranceStatus.notStarted:
+        return 'Neîncepută';
+      case InsuranceStatus.active:
+        return 'Activă';
+      case InsuranceStatus.expiringSoon:
+        return 'Expiră curând';
+      case InsuranceStatus.expired:
+        return 'Expirată';
+      case InsuranceStatus.unknown:
+        return 'Lipsă';
     }
   }
 
@@ -66,15 +133,21 @@ class Asset extends Equatable {
         id,
         name,
         description,
-        serialNumber,
         category,
         status,
-        location,
         value,
         purchaseDate,
-        lastUpdated,
-        assignedTo,
-        imageUrl,
+        createdAt,
+        spaceId,
+        spaceName,
+        warrantyStatus,
+        warrantyStartDate,
+        warrantyEndDate,
+        warrantyProvider,
+        insuranceStatus,
+        insuranceStartDate,
+        insuranceEndDate,
+        insuranceCompany,
+        insuranceValue,
       ];
 }
-

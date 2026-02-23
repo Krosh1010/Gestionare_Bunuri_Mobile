@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/asset.dart';
+import '../../domain/repositories/inventory_repository.dart';
 
 // Events
 abstract class InventoryEvent extends Equatable {
@@ -25,12 +26,24 @@ class FilterByCategory extends InventoryEvent {
   List<Object?> get props => [category];
 }
 
-class FilterByStatus extends InventoryEvent {
-  final AssetStatus? status;
-  const FilterByStatus(this.status);
+class ApplyAdvancedFilters extends InventoryEvent {
+  final Set<AssetCategory> categories;
+  final double? priceMin;
+  final double? priceMax;
+  final String? spaceFilter;
+
+  const ApplyAdvancedFilters({
+    required this.categories,
+    this.priceMin,
+    this.priceMax,
+    this.spaceFilter,
+  });
+
   @override
-  List<Object?> get props => [status];
+  List<Object?> get props => [categories, priceMin, priceMax, spaceFilter];
 }
+
+class ClearFilters extends InventoryEvent {}
 
 class DeleteAssetEvent extends InventoryEvent {
   final String assetId;
@@ -54,19 +67,46 @@ class InventoryLoaded extends InventoryState {
   final List<Asset> assets;
   final List<Asset> filteredAssets;
   final AssetCategory? selectedCategory;
-  final AssetStatus? selectedStatus;
   final String searchQuery;
+  final Set<AssetCategory> activeCategories;
+  final double? priceMin;
+  final double? priceMax;
+  final String? spaceFilter;
 
   const InventoryLoaded({
     required this.assets,
     required this.filteredAssets,
     this.selectedCategory,
-    this.selectedStatus,
     this.searchQuery = '',
+    this.activeCategories = const {},
+    this.priceMin,
+    this.priceMax,
+    this.spaceFilter,
   });
 
+  int get totalAssets => assets.length;
+  double get totalValue => assets.fold(0.0, (sum, a) => sum + a.value);
+
+  int get activeFiltersCount {
+    int count = 0;
+    if (activeCategories.isNotEmpty) count++;
+    if (priceMin != null) count++;
+    if (priceMax != null) count++;
+    if (spaceFilter != null && spaceFilter!.isNotEmpty) count++;
+    return count;
+  }
+
   @override
-  List<Object?> get props => [assets, filteredAssets, selectedCategory, selectedStatus, searchQuery];
+  List<Object?> get props => [
+        assets,
+        filteredAssets,
+        selectedCategory,
+        searchQuery,
+        activeCategories,
+        priceMin,
+        priceMax,
+        spaceFilter,
+      ];
 }
 
 class InventoryError extends InventoryState {
@@ -78,190 +118,185 @@ class InventoryError extends InventoryState {
 
 // Bloc
 class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
-  InventoryBloc() : super(InventoryInitial()) {
+  final InventoryRepository repository;
+
+  InventoryBloc({required this.repository}) : super(InventoryInitial()) {
     on<LoadAssets>(_onLoadAssets);
     on<SearchAssets>(_onSearchAssets);
     on<FilterByCategory>(_onFilterByCategory);
-    on<FilterByStatus>(_onFilterByStatus);
+    on<ApplyAdvancedFilters>(_onApplyAdvancedFilters);
+    on<ClearFilters>(_onClearFilters);
     on<DeleteAssetEvent>(_onDeleteAsset);
   }
 
-  // Date demo pentru prezentare
-  final List<Asset> _demoAssets = [
-    Asset(
-      id: '1',
-      name: 'Laptop Dell XPS 15',
-      description: 'Laptop performant pentru dezvoltare software',
-      serialNumber: 'DL-XPS-2024-001',
-      category: AssetCategory.electronics,
-      status: AssetStatus.active,
-      location: 'Birou 101',
-      value: 7500.00,
-      purchaseDate: DateTime(2024, 3, 15),
-      assignedTo: 'Ion Popescu',
-    ),
-    Asset(
-      id: '2',
-      name: 'Monitor LG UltraWide 34"',
-      description: 'Monitor ultrawide pentru productivitate',
-      serialNumber: 'LG-UW34-2024-002',
-      category: AssetCategory.electronics,
-      status: AssetStatus.active,
-      location: 'Birou 101',
-      value: 3200.00,
-      purchaseDate: DateTime(2024, 5, 20),
-      assignedTo: 'Ion Popescu',
-    ),
-    Asset(
-      id: '3',
-      name: 'Birou Ergonomic Standing Desk',
-      description: 'Birou reglabil pe înălțime',
-      serialNumber: 'SD-ERG-2024-003',
-      category: AssetCategory.furniture,
-      status: AssetStatus.active,
-      location: 'Birou 102',
-      value: 2800.00,
-      purchaseDate: DateTime(2024, 1, 10),
-    ),
-    Asset(
-      id: '4',
-      name: 'Imprimantă HP LaserJet Pro',
-      description: 'Imprimantă laser color multifuncțională',
-      serialNumber: 'HP-LJ-2023-004',
-      category: AssetCategory.equipment,
-      status: AssetStatus.inRepair,
-      location: 'Sala de Conferințe',
-      value: 1500.00,
-      purchaseDate: DateTime(2023, 8, 5),
-    ),
-    Asset(
-      id: '5',
-      name: 'Autoturism Dacia Duster',
-      description: 'Vehicul de serviciu',
-      serialNumber: 'DD-2023-005',
-      category: AssetCategory.vehicles,
-      status: AssetStatus.active,
-      location: 'Parcarea Principală',
-      value: 85000.00,
-      purchaseDate: DateTime(2023, 6, 12),
-      assignedTo: 'Maria Ionescu',
-    ),
-    Asset(
-      id: '6',
-      name: 'Proiector Epson EB-U05',
-      description: 'Proiector Full HD pentru prezentări',
-      serialNumber: 'EP-U05-2022-006',
-      category: AssetCategory.electronics,
-      status: AssetStatus.decommissioned,
-      location: 'Depozit',
-      value: 2100.00,
-      purchaseDate: DateTime(2022, 2, 28),
-    ),
-    Asset(
-      id: '7',
-      name: 'Scaun Ergonomic Herman Miller',
-      description: 'Scaun de birou ergonomic premium',
-      serialNumber: 'HM-AER-2024-007',
-      category: AssetCategory.furniture,
-      status: AssetStatus.active,
-      location: 'Birou 103',
-      value: 4500.00,
-      purchaseDate: DateTime(2024, 4, 1),
-      assignedTo: 'Andrei Vasile',
-    ),
-    Asset(
-      id: '8',
-      name: 'Server Rack Dell PowerEdge',
-      description: 'Server pentru infrastructura IT',
-      serialNumber: 'DL-PE-2023-008',
-      category: AssetCategory.equipment,
-      status: AssetStatus.active,
-      location: 'Camera Serverelor',
-      value: 32000.00,
-      purchaseDate: DateTime(2023, 11, 15),
-    ),
-  ];
+  List<Asset> _applyAllFilters({
+    required List<Asset> assets,
+    String searchQuery = '',
+    AssetCategory? selectedCategory,
+    Set<AssetCategory> activeCategories = const {},
+    double? priceMin,
+    double? priceMax,
+    String? spaceFilter,
+  }) {
+    var filtered = List<Asset>.from(assets);
+
+    // Search
+    if (searchQuery.isNotEmpty) {
+      final query = searchQuery.toLowerCase();
+      filtered = filtered.where((asset) {
+        return asset.name.toLowerCase().contains(query) ||
+            asset.location.toLowerCase().contains(query) ||
+            (asset.description?.toLowerCase().contains(query) ?? false) ||
+            (asset.spaceName?.toLowerCase().contains(query) ?? false);
+      }).toList();
+    }
+
+    // Category (simple filter)
+    if (selectedCategory != null) {
+      filtered = filtered.where((a) => a.category == selectedCategory).toList();
+    }
+
+    // Advanced category filter
+    if (activeCategories.isNotEmpty) {
+      filtered = filtered.where((a) => activeCategories.contains(a.category)).toList();
+    }
+
+    // Price range
+    if (priceMin != null) {
+      filtered = filtered.where((a) => a.value >= priceMin).toList();
+    }
+    if (priceMax != null) {
+      filtered = filtered.where((a) => a.value <= priceMax).toList();
+    }
+
+    // Space filter
+    if (spaceFilter != null && spaceFilter.isNotEmpty) {
+      final loc = spaceFilter.toLowerCase();
+      filtered = filtered.where((a) => a.location.toLowerCase().contains(loc)).toList();
+    }
+
+    return filtered;
+  }
 
   Future<void> _onLoadAssets(LoadAssets event, Emitter<InventoryState> emit) async {
     emit(InventoryLoading());
     try {
-      await Future.delayed(const Duration(milliseconds: 800));
-      emit(InventoryLoaded(assets: _demoAssets, filteredAssets: _demoAssets));
+      final assets = await repository.getAssets();
+      emit(InventoryLoaded(
+        assets: assets,
+        filteredAssets: assets,
+      ));
     } catch (e) {
-      emit(InventoryError(e.toString()));
+      emit(InventoryError('Nu s-au putut încărca bunurile: ${e.toString()}'));
     }
   }
 
   void _onSearchAssets(SearchAssets event, Emitter<InventoryState> emit) {
     if (state is InventoryLoaded) {
-      final currentState = state as InventoryLoaded;
-      final query = event.query.toLowerCase();
-      final filtered = currentState.assets.where((asset) {
-        return asset.name.toLowerCase().contains(query) ||
-            asset.location.toLowerCase().contains(query) ||
-            (asset.serialNumber?.toLowerCase().contains(query) ?? false) ||
-            (asset.assignedTo?.toLowerCase().contains(query) ?? false);
-      }).toList();
-      emit(InventoryLoaded(
-        assets: currentState.assets,
-        filteredAssets: filtered,
-        selectedCategory: currentState.selectedCategory,
-        selectedStatus: currentState.selectedStatus,
+      final s = state as InventoryLoaded;
+      final filtered = _applyAllFilters(
+        assets: s.assets,
         searchQuery: event.query,
+        selectedCategory: s.selectedCategory,
+        activeCategories: s.activeCategories,
+        priceMin: s.priceMin,
+        priceMax: s.priceMax,
+        spaceFilter: s.spaceFilter,
+      );
+      emit(InventoryLoaded(
+        assets: s.assets,
+        filteredAssets: filtered,
+        selectedCategory: s.selectedCategory,
+        searchQuery: event.query,
+        activeCategories: s.activeCategories,
+        priceMin: s.priceMin,
+        priceMax: s.priceMax,
+        spaceFilter: s.spaceFilter,
       ));
     }
   }
 
   void _onFilterByCategory(FilterByCategory event, Emitter<InventoryState> emit) {
     if (state is InventoryLoaded) {
-      final currentState = state as InventoryLoaded;
-      List<Asset> filtered = currentState.assets;
-      if (event.category != null) {
-        filtered = filtered.where((a) => a.category == event.category).toList();
-      }
-      if (currentState.selectedStatus != null) {
-        filtered = filtered.where((a) => a.status == currentState.selectedStatus).toList();
-      }
+      final s = state as InventoryLoaded;
+      final filtered = _applyAllFilters(
+        assets: s.assets,
+        searchQuery: s.searchQuery,
+        selectedCategory: event.category,
+        activeCategories: s.activeCategories,
+        priceMin: s.priceMin,
+        priceMax: s.priceMax,
+        spaceFilter: s.spaceFilter,
+      );
       emit(InventoryLoaded(
-        assets: currentState.assets,
+        assets: s.assets,
         filteredAssets: filtered,
         selectedCategory: event.category,
-        selectedStatus: currentState.selectedStatus,
+        searchQuery: s.searchQuery,
+        activeCategories: s.activeCategories,
+        priceMin: s.priceMin,
+        priceMax: s.priceMax,
+        spaceFilter: s.spaceFilter,
       ));
     }
   }
 
-  void _onFilterByStatus(FilterByStatus event, Emitter<InventoryState> emit) {
+  void _onApplyAdvancedFilters(ApplyAdvancedFilters event, Emitter<InventoryState> emit) {
     if (state is InventoryLoaded) {
-      final currentState = state as InventoryLoaded;
-      List<Asset> filtered = currentState.assets;
-      if (currentState.selectedCategory != null) {
-        filtered = filtered.where((a) => a.category == currentState.selectedCategory).toList();
-      }
-      if (event.status != null) {
-        filtered = filtered.where((a) => a.status == event.status).toList();
-      }
+      final s = state as InventoryLoaded;
+      final filtered = _applyAllFilters(
+        assets: s.assets,
+        searchQuery: s.searchQuery,
+        selectedCategory: null,
+        activeCategories: event.categories,
+        priceMin: event.priceMin,
+        priceMax: event.priceMax,
+        spaceFilter: event.spaceFilter,
+      );
       emit(InventoryLoaded(
-        assets: currentState.assets,
+        assets: s.assets,
         filteredAssets: filtered,
-        selectedCategory: currentState.selectedCategory,
-        selectedStatus: event.status,
+        selectedCategory: null,
+        searchQuery: s.searchQuery,
+        activeCategories: event.categories,
+        priceMin: event.priceMin,
+        priceMax: event.priceMax,
+        spaceFilter: event.spaceFilter,
       ));
     }
   }
 
-  void _onDeleteAsset(DeleteAssetEvent event, Emitter<InventoryState> emit) {
+  void _onClearFilters(ClearFilters event, Emitter<InventoryState> emit) {
     if (state is InventoryLoaded) {
-      final currentState = state as InventoryLoaded;
-      final updatedAssets = currentState.assets.where((a) => a.id != event.assetId).toList();
-      final updatedFiltered = currentState.filteredAssets.where((a) => a.id != event.assetId).toList();
+      final s = state as InventoryLoaded;
       emit(InventoryLoaded(
-        assets: updatedAssets,
-        filteredAssets: updatedFiltered,
-        selectedCategory: currentState.selectedCategory,
-        selectedStatus: currentState.selectedStatus,
-        searchQuery: currentState.searchQuery,
+        assets: s.assets,
+        filteredAssets: s.assets,
+        searchQuery: '',
       ));
+    }
+  }
+
+  Future<void> _onDeleteAsset(DeleteAssetEvent event, Emitter<InventoryState> emit) async {
+    if (state is InventoryLoaded) {
+      final s = state as InventoryLoaded;
+      try {
+        await repository.deleteAsset(event.assetId);
+        final updatedAssets = s.assets.where((a) => a.id != event.assetId).toList();
+        final updatedFiltered = s.filteredAssets.where((a) => a.id != event.assetId).toList();
+        emit(InventoryLoaded(
+          assets: updatedAssets,
+          filteredAssets: updatedFiltered,
+          selectedCategory: s.selectedCategory,
+          searchQuery: s.searchQuery,
+          activeCategories: s.activeCategories,
+          priceMin: s.priceMin,
+          priceMax: s.priceMax,
+          spaceFilter: s.spaceFilter,
+        ));
+      } catch (e) {
+        emit(InventoryError('Nu s-a putut șterge bunul: ${e.toString()}'));
+      }
     }
   }
 }

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../domain/entities/asset.dart';
 import '../bloc/inventory_bloc.dart';
 
@@ -13,7 +14,7 @@ class InventoryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => InventoryBloc()..add(LoadAssets()),
+      create: (_) => sl<InventoryBloc>()..add(LoadAssets()),
       child: const _InventoryView(),
     );
   }
@@ -35,6 +36,20 @@ class _InventoryViewState extends State<_InventoryView> {
     super.dispose();
   }
 
+  Future<void> _navigateToAdd() async {
+    await context.push('/inventory/add');
+    if (mounted) {
+      context.read<InventoryBloc>().add(LoadAssets());
+    }
+  }
+
+  Future<void> _navigateToDetail(Asset asset) async {
+    await context.push('/inventory/${asset.id}', extra: asset);
+    if (mounted) {
+      context.read<InventoryBloc>().add(LoadAssets());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -42,35 +57,57 @@ class _InventoryViewState extends State<_InventoryView> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             _buildHeader(context),
-            // Search Bar
-            _buildSearchBar(context),
-            // Filter Chips
-            _buildFilterChips(context),
-            // Asset List
             Expanded(
-              child: _buildAssetList(context),
+              child: RefreshIndicator(
+                color: AppColors.primary,
+                onRefresh: () async {
+                  context.read<InventoryBloc>().add(LoadAssets());
+                  await Future.delayed(const Duration(milliseconds: 800));
+                },
+                child: CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildStatsOverview(context)),
+                    SliverToBoxAdapter(child: _buildSearchAndActions(context)),
+                    SliverToBoxAdapter(child: _buildFilterChips(context)),
+                    SliverToBoxAdapter(child: _buildResultsCount(context)),
+                    _buildAssetList(context),
+                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/inventory/add'),
+        onPressed: _navigateToAdd,
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
         label: const Text(
           AppStrings.addAsset,
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
+        elevation: 6,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
 
+  // ─── HEADER ───────────────────────────────────────────────────
   Widget _buildHeader(BuildContext context) {
-    return Padding(
+    return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -78,64 +115,107 @@ class _InventoryViewState extends State<_InventoryView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                AppStrings.inventory,
+                'Inventar Bunuri',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w700,
+                      fontSize: 22,
                     ),
               ),
-              const SizedBox(height: 4),
-              BlocBuilder<InventoryBloc, InventoryState>(
-                builder: (context, state) {
-                  final count = state is InventoryLoaded ? state.filteredAssets.length : 0;
-                  return Text(
-                    '$count bunuri găsite',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                  );
-                },
+              const SizedBox(height: 2),
+              Text(
+                'Gestionează toate activele tale',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
               ),
             ],
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
-            ),
-            child: IconButton(
-              onPressed: () => _showSortOptions(context),
-              icon: const Icon(Icons.sort_rounded, color: AppColors.textSecondary),
-            ),
+          BlocBuilder<InventoryBloc, InventoryState>(
+            builder: (context, state) {
+              final filterCount = state is InventoryLoaded ? state.activeFiltersCount : 0;
+              return _HeaderIconButton(
+                icon: Icons.tune_rounded,
+                badge: filterCount,
+                onTap: () => _showAdvancedFilters(context),
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSearchBar(BuildContext context) {
+  // ─── STATS OVERVIEW ──────────────────────────────────────────
+  Widget _buildStatsOverview(BuildContext context) {
+    return BlocBuilder<InventoryBloc, InventoryState>(
+      builder: (context, state) {
+        if (state is! InventoryLoaded) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: _StatCard(
+                  emoji: '📦',
+                  value: '${state.totalAssets}',
+                  label: 'Total bunuri',
+                  gradient: const [Color(0xFF667EEA), Color(0xFF764BA2)],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _StatCard(
+                  emoji: '💰',
+                  value: _formatCompactValue(state.totalValue),
+                  label: 'Valoare totală',
+                  gradient: const [Color(0xFFF59E0B), Color(0xFFD97706)],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatCompactValue(double value) {
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}M RON';
+    } else if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(0)}K RON';
+    }
+    return '${value.toStringAsFixed(0)} RON';
+  }
+
+  // ─── SEARCH BAR ──────────────────────────────────────────────
+  Widget _buildSearchAndActions(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
       child: TextField(
         controller: _searchController,
         onChanged: (value) {
+          setState(() {});
           context.read<InventoryBloc>().add(SearchAssets(value));
         },
         decoration: InputDecoration(
           hintText: AppStrings.searchAssets,
-          prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textHint),
+          hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+          prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textHint, size: 22),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.close_rounded, color: AppColors.textHint),
+                  icon: const Icon(Icons.close_rounded, color: AppColors.textHint, size: 20),
                   onPressed: () {
                     _searchController.clear();
+                    setState(() {});
                     context.read<InventoryBloc>().add(const SearchAssets(''));
                   },
                 )
               : null,
           filled: true,
           fillColor: AppColors.surface,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
@@ -153,6 +233,7 @@ class _InventoryViewState extends State<_InventoryView> {
     );
   }
 
+  // ─── FILTER CHIPS ────────────────────────────────────────────
   Widget _buildFilterChips(BuildContext context) {
     return BlocBuilder<InventoryBloc, InventoryState>(
       builder: (context, state) {
@@ -163,38 +244,45 @@ class _InventoryViewState extends State<_InventoryView> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 24),
             children: [
-              _FilterChip(
+              _CategoryChip(
                 label: 'Toate',
                 isSelected: selectedCategory == null,
                 onTap: () => context.read<InventoryBloc>().add(const FilterByCategory(null)),
               ),
               const SizedBox(width: 8),
-              _FilterChip(
+              _CategoryChip(
                 label: 'Electronică',
-                icon: Icons.devices_rounded,
+                emoji: '💻',
                 isSelected: selectedCategory == AssetCategory.electronics,
                 onTap: () => context.read<InventoryBloc>().add(const FilterByCategory(AssetCategory.electronics)),
               ),
               const SizedBox(width: 8),
-              _FilterChip(
+              _CategoryChip(
                 label: 'Mobilier',
-                icon: Icons.chair_rounded,
+                emoji: '🛋️',
                 isSelected: selectedCategory == AssetCategory.furniture,
                 onTap: () => context.read<InventoryBloc>().add(const FilterByCategory(AssetCategory.furniture)),
               ),
               const SizedBox(width: 8),
-              _FilterChip(
+              _CategoryChip(
                 label: 'Vehicule',
-                icon: Icons.directions_car_rounded,
+                emoji: '🚗',
                 isSelected: selectedCategory == AssetCategory.vehicles,
                 onTap: () => context.read<InventoryBloc>().add(const FilterByCategory(AssetCategory.vehicles)),
               ),
               const SizedBox(width: 8),
-              _FilterChip(
-                label: 'Echipamente',
-                icon: Icons.build_rounded,
-                isSelected: selectedCategory == AssetCategory.equipment,
-                onTap: () => context.read<InventoryBloc>().add(const FilterByCategory(AssetCategory.equipment)),
+              _CategoryChip(
+                label: 'Documente',
+                emoji: '📄',
+                isSelected: selectedCategory == AssetCategory.documents,
+                onTap: () => context.read<InventoryBloc>().add(const FilterByCategory(AssetCategory.documents)),
+              ),
+              const SizedBox(width: 8),
+              _CategoryChip(
+                label: 'Altele',
+                emoji: '📁',
+                isSelected: selectedCategory == AssetCategory.other,
+                onTap: () => context.read<InventoryBloc>().add(const FilterByCategory(AssetCategory.other)),
               ),
             ],
           ),
@@ -203,122 +291,547 @@ class _InventoryViewState extends State<_InventoryView> {
     );
   }
 
+  // ─── RESULTS COUNT ───────────────────────────────────────────
+  Widget _buildResultsCount(BuildContext context) {
+    return BlocBuilder<InventoryBloc, InventoryState>(
+      builder: (context, state) {
+        final count = state is InventoryLoaded ? state.filteredAssets.length : 0;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+          child: Text(
+            '$count bunuri găsite',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ─── ASSET LIST ─────────────────────────────────────────────
   Widget _buildAssetList(BuildContext context) {
     return BlocBuilder<InventoryBloc, InventoryState>(
       builder: (context, state) {
         if (state is InventoryLoading) {
-          return const Center(
-            child: CircularProgressIndicator(color: AppColors.primary),
+          return const SliverFillRemaining(
+            child: Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
           );
         }
 
         if (state is InventoryError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline_rounded, size: 64, color: AppColors.error.withValues(alpha: 0.5)),
-                const SizedBox(height: 16),
-                Text(state.message, style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () => context.read<InventoryBloc>().add(LoadAssets()),
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text(AppStrings.retry),
-                ),
-              ],
+          return SliverFillRemaining(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline_rounded, size: 64, color: AppColors.error.withValues(alpha: 0.5)),
+                  const SizedBox(height: 16),
+                  Text(state.message, style: Theme.of(context).textTheme.bodyMedium),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => context.read<InventoryBloc>().add(LoadAssets()),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text(AppStrings.retry),
+                  ),
+                ],
+              ),
             ),
           );
         }
 
         if (state is InventoryLoaded) {
           if (state.filteredAssets.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.inventory_2_outlined, size: 80, color: AppColors.textHint.withValues(alpha: 0.4)),
-                  const SizedBox(height: 16),
-                  Text(
-                    AppStrings.noAssetsFound,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Încearcă să modifici filtrele sau adaugă un bun nou',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
+            return SliverFillRemaining(
+              child: _buildEmptyState(context),
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 100),
-            itemCount: state.filteredAssets.length,
-            itemBuilder: (context, index) {
-              final asset = state.filteredAssets[index];
-              return _AssetCard(asset: asset);
-            },
+          return SliverPadding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _AssetListCard(
+                  asset: state.filteredAssets[index],
+                  onTap: _navigateToDetail,
+                ),
+                childCount: state.filteredAssets.length,
+              ),
+            ),
           );
         }
 
-        return const SizedBox.shrink();
+        return const SliverToBoxAdapter(child: SizedBox.shrink());
       },
     );
   }
 
-  void _showSortOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
+  // ─── EMPTY STATE ─────────────────────────────────────────────
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Center(
-              child: Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: const Center(
+                child: Text('📦', style: TextStyle(fontSize: 48)),
               ),
             ),
-            const SizedBox(height: 20),
-            Text(AppStrings.sortBy, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            _sortOption(context, Icons.sort_by_alpha_rounded, 'Nume (A-Z)'),
-            _sortOption(context, Icons.attach_money_rounded, 'Valoare (descrescător)'),
-            _sortOption(context, Icons.calendar_today_rounded, 'Data achiziției'),
-            _sortOption(context, Icons.location_on_rounded, 'Locație'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
+            Text(
+              'Nu s-au găsit bunuri',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Încearcă să modifici filtrele sau adaugă un bun nou',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton.icon(
+              onPressed: _navigateToAdd,
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: const Text(
+                'Adaugă primul bun',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 4,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _sortOption(BuildContext context, IconData icon, String label) {
-    return ListTile(
-      leading: Icon(icon, color: AppColors.primary),
-      title: Text(label),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onTap: () => Navigator.pop(context),
+  // ─── ADVANCED FILTERS ────────────────────────────────────────
+  void _showAdvancedFilters(BuildContext context) {
+    final bloc = context.read<InventoryBloc>();
+    final state = bloc.state;
+    Set<AssetCategory> selectedCategories = {};
+    double? priceMin;
+    double? priceMax;
+    final locationController = TextEditingController();
+
+    if (state is InventoryLoaded) {
+      selectedCategories = Set.from(state.activeCategories);
+      priceMin = state.priceMin;
+      priceMax = state.priceMax;
+      locationController.text = state.spaceFilter ?? '';
+    }
+
+    final priceMinController = TextEditingController(
+      text: priceMin != null ? priceMin.toStringAsFixed(0) : '',
+    );
+    final priceMaxController = TextEditingController(
+      text: priceMax != null ? priceMax.toStringAsFixed(0) : '',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle
+              const SizedBox(height: 12),
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
+              ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.tune_rounded, color: AppColors.primary, size: 22),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Filtre avansate',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppColors.background,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Body
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Category filter
+                      _FilterSectionTitle(emoji: '📊', title: 'Categorie'),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _AdvancedFilterChip(
+                            emoji: '💻',
+                            label: 'Electronice',
+                            isSelected: selectedCategories.contains(AssetCategory.electronics),
+                            onTap: () => setModalState(() {
+                              if (selectedCategories.contains(AssetCategory.electronics)) {
+                                selectedCategories.remove(AssetCategory.electronics);
+                              } else {
+                                selectedCategories.add(AssetCategory.electronics);
+                              }
+                            }),
+                          ),
+                          _AdvancedFilterChip(
+                            emoji: '🛋️',
+                            label: 'Mobilier',
+                            isSelected: selectedCategories.contains(AssetCategory.furniture),
+                            onTap: () => setModalState(() {
+                              if (selectedCategories.contains(AssetCategory.furniture)) {
+                                selectedCategories.remove(AssetCategory.furniture);
+                              } else {
+                                selectedCategories.add(AssetCategory.furniture);
+                              }
+                            }),
+                          ),
+                          _AdvancedFilterChip(
+                            emoji: '🚗',
+                            label: 'Vehicule',
+                            isSelected: selectedCategories.contains(AssetCategory.vehicles),
+                            onTap: () => setModalState(() {
+                              if (selectedCategories.contains(AssetCategory.vehicles)) {
+                                selectedCategories.remove(AssetCategory.vehicles);
+                              } else {
+                                selectedCategories.add(AssetCategory.vehicles);
+                              }
+                            }),
+                          ),
+                          _AdvancedFilterChip(
+                            emoji: '📄',
+                            label: 'Documente',
+                            isSelected: selectedCategories.contains(AssetCategory.documents),
+                            onTap: () => setModalState(() {
+                              if (selectedCategories.contains(AssetCategory.documents)) {
+                                selectedCategories.remove(AssetCategory.documents);
+                              } else {
+                                selectedCategories.add(AssetCategory.documents);
+                              }
+                            }),
+                          ),
+                          _AdvancedFilterChip(
+                            emoji: '📁',
+                            label: 'Altele',
+                            isSelected: selectedCategories.contains(AssetCategory.other),
+                            onTap: () => setModalState(() {
+                              if (selectedCategories.contains(AssetCategory.other)) {
+                                selectedCategories.remove(AssetCategory.other);
+                              } else {
+                                selectedCategories.add(AssetCategory.other);
+                              }
+                            }),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Divider(color: AppColors.divider.withValues(alpha: 0.3)),
+                      const SizedBox(height: 16),
+                      // Price range
+                      _FilterSectionTitle(emoji: '💰', title: 'Preț (RON)'),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _PriceInput(
+                              label: 'Min',
+                              controller: priceMinController,
+                              hint: '0',
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text('—', style: TextStyle(color: AppColors.textHint, fontSize: 18)),
+                          ),
+                          Expanded(
+                            child: _PriceInput(
+                              label: 'Max',
+                              controller: priceMaxController,
+                              hint: '∞',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Divider(color: AppColors.divider.withValues(alpha: 0.3)),
+                      const SizedBox(height: 16),
+                      // Location
+                      _FilterSectionTitle(emoji: '📍', title: 'Locație'),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: locationController,
+                        decoration: InputDecoration(
+                          hintText: 'Caută locație...',
+                          hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+                          prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.textHint, size: 20),
+                          filled: true,
+                          fillColor: AppColors.background,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+              // Footer
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  border: Border(
+                    top: BorderSide(color: AppColors.divider.withValues(alpha: 0.3)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          bloc.add(ClearFilters());
+                          _searchController.clear();
+                          Navigator.pop(ctx);
+                        },
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Resetează'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                          side: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          final pMin = double.tryParse(priceMinController.text);
+                          final pMax = double.tryParse(priceMaxController.text);
+                          bloc.add(ApplyAdvancedFilters(
+                            categories: selectedCategories,
+                            priceMin: pMin,
+                            priceMax: pMax,
+                            spaceFilter: locationController.text.isNotEmpty ? locationController.text : null,
+                          ));
+                          Navigator.pop(ctx);
+                        },
+                        icon: const Icon(Icons.check_rounded, size: 18, color: Colors.white),
+                        label: const Text('Aplică filtre', style: TextStyle(color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _FilterChip extends StatelessWidget {
+// ═══════════════════════════════════════════════════════════════════
+// REUSABLE WIDGETS
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── HEADER ICON BUTTON ────────────────────────────────────────
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final int badge;
+
+  const _HeaderIconButton({
+    required this.icon,
+    required this.onTap,
+    this.badge = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
+          ),
+          child: IconButton(
+            onPressed: onTap,
+            icon: Icon(icon, color: AppColors.textSecondary, size: 22),
+            constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+            padding: EdgeInsets.zero,
+          ),
+        ),
+        if (badge > 0)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF667EEA), Color(0xFF764BA2)]),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Text(
+                  '$badge',
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ─── STAT CARD ─────────────────────────────────────────────────
+class _StatCard extends StatelessWidget {
+  final String emoji;
+  final String value;
   final String label;
-  final IconData? icon;
+  final List<Color> gradient;
+
+  const _StatCard({
+    required this.emoji,
+    required this.value,
+    required this.label,
+    required this.gradient,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: gradient[0].withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [gradient[0].withValues(alpha: 0.12), gradient[1].withValues(alpha: 0.08)]),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 20))),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  color: AppColors.textPrimary,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── CATEGORY CHIP ─────────────────────────────────────────────
+class _CategoryChip extends StatelessWidget {
+  final String label;
+  final String? emoji;
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _FilterChip({
+  const _CategoryChip({
     required this.label,
-    this.icon,
+    this.emoji,
     required this.isSelected,
     required this.onTap,
   });
@@ -329,26 +842,29 @@ class _FilterChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primary : AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.divider.withValues(alpha: 0.5),
           ),
+          boxShadow: isSelected
+              ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2))]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (icon != null) ...[
-              Icon(icon, size: 16, color: isSelected ? Colors.white : AppColors.textSecondary),
+            if (emoji != null) ...[
+              Text(emoji!, style: const TextStyle(fontSize: 14)),
               const SizedBox(width: 6),
             ],
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
                 color: isSelected ? Colors.white : AppColors.textSecondary,
               ),
             ),
@@ -359,38 +875,148 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _AssetCard extends StatelessWidget {
+// ─── FILTER SECTION TITLE ──────────────────────────────────────
+class _FilterSectionTitle extends StatelessWidget {
+  final String emoji;
+  final String title;
+
+  const _FilterSectionTitle({required this.emoji, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 14)),
+        const SizedBox(width: 6),
+        Text(
+          title.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textSecondary,
+            letterSpacing: 0.8,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── ADVANCED FILTER CHIP ──────────────────────────────────────
+class _AdvancedFilterChip extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _AdvancedFilterChip({
+    required this.emoji,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withValues(alpha: 0.08) : AppColors.background,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.divider.withValues(alpha: 0.5),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected ? AppColors.primary : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── PRICE INPUT ───────────────────────────────────────────────
+class _PriceInput extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final String hint;
+
+  const _PriceInput({
+    required this.label,
+    required this.controller,
+    required this.hint,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textHint,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+            filled: true,
+            fillColor: AppColors.background,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ASSET LIST CARD
+// ═══════════════════════════════════════════════════════════════════
+class _AssetListCard extends StatelessWidget {
   final Asset asset;
+  final void Function(Asset) onTap;
 
-  const _AssetCard({required this.asset});
-
-  Color _statusColor(AssetStatus status) {
-    switch (status) {
-      case AssetStatus.active:
-        return AppColors.success;
-      case AssetStatus.inRepair:
-        return AppColors.warning;
-      case AssetStatus.decommissioned:
-        return AppColors.error;
-      case AssetStatus.transferred:
-        return AppColors.accent;
-    }
-  }
-
-  IconData _categoryIcon(AssetCategory category) {
-    switch (category) {
-      case AssetCategory.electronics:
-        return Icons.devices_rounded;
-      case AssetCategory.furniture:
-        return Icons.chair_rounded;
-      case AssetCategory.vehicles:
-        return Icons.directions_car_rounded;
-      case AssetCategory.equipment:
-        return Icons.build_rounded;
-      case AssetCategory.other:
-        return Icons.category_rounded;
-    }
-  }
+  const _AssetListCard({
+    required this.asset,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -398,116 +1024,312 @@ class _AssetCard extends StatelessWidget {
     final dateFormatter = DateFormat('dd.MM.yyyy');
 
     return GestureDetector(
-      onTap: () => context.push('/inventory/${asset.id}'),
+      onTap: () => onTap(asset),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          children: [
-            // Category Icon
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(
-                _categoryIcon(asset.category),
-                color: AppColors.primary,
-                size: 26,
-              ),
+          border: Border.all(color: AppColors.divider.withValues(alpha: 0.4)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-            const SizedBox(width: 14),
-            // Info
-            Expanded(
-              child: Column(
+          ],
+        ),
+        child: Column(
+          children: [
+            // Main content row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
+                  // Category Icon
+                  _CategoryIconBox(category: asset.category),
+                  const SizedBox(width: 14),
+                  // Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Name
+                        Text(
                           asset.name,
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.textPrimary,
+                                fontSize: 15,
                               ),
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _statusColor(asset.status).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          asset.statusLabel,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: _statusColor(asset.status),
+                        // Description
+                        if (asset.description != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            asset.description!,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppColors.textHint,
+                                  fontSize: 12,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.location_on_outlined, size: 14, color: AppColors.textHint),
-                      const SizedBox(width: 4),
-                      Text(
-                        asset.location,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
-                      ),
-                      const SizedBox(width: 12),
-                      Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.textHint),
-                      const SizedBox(width: 4),
-                      Text(
-                        dateFormatter.format(asset.purchaseDate),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      if (asset.assignedTo != null)
+                        ],
+                        const SizedBox(height: 10),
+                        // Details row: value + location
                         Row(
                           children: [
-                            const Icon(Icons.person_outline_rounded, size: 14, color: AppColors.textHint),
-                            const SizedBox(width: 4),
-                            Text(
-                              asset.assignedTo!,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
+                            _DetailChip(
+                              icon: Icons.attach_money_rounded,
+                              text: formatter.format(asset.value),
+                              color: AppColors.primary,
+                              isBold: true,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _DetailChip(
+                                icon: Icons.location_on_outlined,
+                                text: asset.location,
+                              ),
                             ),
                           ],
-                        )
-                      else
-                        const SizedBox.shrink(),
-                      Text(
-                        formatter.format(asset.value),
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
-                              fontSize: 13,
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            _DetailChip(
+                              icon: Icons.calendar_today_outlined,
+                              text: dateFormatter.format(asset.purchaseDate),
                             ),
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Chevron to indicate tappable
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Icon(Icons.chevron_right_rounded, color: AppColors.textHint, size: 22),
+                  ),
+                ],
+              ),
+            ),
+            // Warranty / Insurance footer
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              decoration: BoxDecoration(
+                color: AppColors.background.withValues(alpha: 0.5),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(17)),
+              ),
+              child: Row(
+                children: [
+                  // Warranty badge
+                  _WarrantyBadge(
+                    emoji: '🛡️',
+                    label: asset.warrantyStatusLabel,
+                    status: asset.warrantyStatus,
+                  ),
+                  const SizedBox(width: 8),
+                  // Insurance badge
+                  _InsuranceBadge(
+                    emoji: '📄',
+                    label: asset.insuranceStatusLabel,
+                    status: asset.insuranceStatus,
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SHARED SMALL WIDGETS
+// ═══════════════════════════════════════════════════════════════════
+
+class _CategoryIconBox extends StatelessWidget {
+  final AssetCategory category;
+  final double size;
+
+  const _CategoryIconBox({required this.category, this.size = 52});
+
+  String _emoji() {
+    switch (category) {
+      case AssetCategory.electronics: return '💻';
+      case AssetCategory.furniture: return '🛋️';
+      case AssetCategory.vehicles: return '🚗';
+      case AssetCategory.documents: return '📄';
+      case AssetCategory.other: return '📁';
+    }
+  }
+
+  List<Color> _gradientColors() {
+    switch (category) {
+      case AssetCategory.electronics: return [const Color(0xFF667EEA), const Color(0xFF764BA2)];
+      case AssetCategory.furniture: return [const Color(0xFF10B981), const Color(0xFF22C55E)];
+      case AssetCategory.vehicles: return [const Color(0xFFF59E0B), const Color(0xFFD97706)];
+      case AssetCategory.documents: return [const Color(0xFF3B82F6), const Color(0xFF2563EB)];
+      case AssetCategory.other: return [const Color(0xFF8B5CF6), const Color(0xFF7C3AED)];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _gradientColors();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [colors[0].withValues(alpha: 0.12), colors[1].withValues(alpha: 0.08)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(size * 0.25),
+      ),
+      child: Center(
+        child: Text(_emoji(), style: TextStyle(fontSize: size * 0.45)),
+      ),
+    );
+  }
+}
+
+class _DetailChip extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color? color;
+  final bool isBold;
+
+  const _DetailChip({
+    required this.icon,
+    required this.text,
+    this.color,
+    this.isBold = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color ?? AppColors.textHint),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.w700 : FontWeight.w400,
+              color: color ?? AppColors.textSecondary,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WarrantyBadge extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final WarrantyStatus status;
+
+  const _WarrantyBadge({
+    required this.emoji,
+    required this.label,
+    required this.status,
+  });
+
+  Color _bgColor() {
+    switch (status) {
+      case WarrantyStatus.active: return const Color(0xFF4F46E5);
+      case WarrantyStatus.expiringSoon: return const Color(0xFFFB923C);
+      case WarrantyStatus.expired: return const Color(0xFFEF4444);
+      case WarrantyStatus.unknown: return const Color(0xFF9CA3AF);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _bgColor();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: c.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: c,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InsuranceBadge extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final InsuranceStatus status;
+
+  const _InsuranceBadge({
+    required this.emoji,
+    required this.label,
+    required this.status,
+  });
+
+  Color _bgColor() {
+    switch (status) {
+      case InsuranceStatus.active: return const Color(0xFF22C55E);
+      case InsuranceStatus.expiringSoon: return const Color(0xFFFBBF24);
+      case InsuranceStatus.expired: return const Color(0xFFEF4444);
+      case InsuranceStatus.notStarted: return const Color(0xFF9CA3AF);
+      case InsuranceStatus.unknown: return const Color(0xFF9CA3AF);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _bgColor();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: c.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: c,
+            ),
+          ),
+        ],
       ),
     );
   }

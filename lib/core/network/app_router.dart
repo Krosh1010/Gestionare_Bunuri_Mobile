@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
+import '../../features/dashboard/presentation/providers/dashboard_provider.dart';
 import '../../features/inventory/presentation/pages/inventory_page.dart';
 import '../../features/inventory/presentation/pages/add_asset_page.dart';
 import '../../features/inventory/presentation/pages/asset_detail_page.dart';
-import '../../features/reports/presentation/pages/reports_page.dart';
+import '../../features/inventory/presentation/pages/post_save_menu_page.dart';
+import '../../features/inventory/presentation/pages/edit_asset_page.dart';
+import '../../features/inventory/domain/entities/asset.dart';
+import '../../features/reports/presentation/pages/export_page.dart';
+import '../../features/spaces/presentation/pages/spaces_page.dart';
+import '../../features/states/presentation/pages/coverage_status_page.dart';
 import '../constants/app_colors.dart';
+import '../di/injection_container.dart';
 
 class AppRouter {
   AppRouter._();
@@ -33,15 +41,26 @@ class AppRouter {
         routes: [
           GoRoute(
             path: '/dashboard',
-            builder: (context, state) => const DashboardPage(),
+            builder: (context, state) => BlocProvider(
+              create: (_) => sl<DashboardCubit>()..loadDashboardStats(),
+              child: const DashboardPage(),
+            ),
           ),
           GoRoute(
             path: '/inventory',
             builder: (context, state) => const InventoryPage(),
           ),
           GoRoute(
+            path: '/coverage',
+            builder: (context, state) => const CoverageStatusPage(),
+          ),
+          GoRoute(
             path: '/reports',
-            builder: (context, state) => const ReportsPage(),
+            builder: (context, state) => const ExportPage(),
+          ),
+          GoRoute(
+            path: '/spaces',
+            builder: (context, state) => const SpacesPage(),
           ),
         ],
       ),
@@ -51,11 +70,39 @@ class AppRouter {
         builder: (context, state) => const AddAssetPage(),
       ),
       GoRoute(
+        path: '/inventory/edit',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final asset = state.extra;
+          if (asset is Asset) {
+            return EditAssetPage(asset: asset);
+          }
+          return const Scaffold(
+            body: Center(child: Text('Eroare: bunul nu a fost găsit')),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/inventory/post-save/:assetId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final assetId = int.parse(state.pathParameters['assetId']!);
+          return PostSaveMenuPage(assetId: assetId);
+        },
+      ),
+      GoRoute(
         path: '/inventory/:id',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => AssetDetailPage(
-          assetId: state.pathParameters['id']!,
-        ),
+        builder: (context, state) {
+          final asset = state.extra;
+          if (asset is Asset) {
+            return AssetDetailPage(asset: asset);
+          }
+          // Fallback - nu ar trebui să ajungem aici
+          return const Scaffold(
+            body: Center(child: Text('Eroare: bunul nu a fost găsit')),
+          );
+        },
       ),
     ],
   );
@@ -70,7 +117,9 @@ class MainShell extends StatelessWidget {
     final String location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/dashboard')) return 0;
     if (location.startsWith('/inventory')) return 1;
-    if (location.startsWith('/reports')) return 2;
+    if (location.startsWith('/coverage')) return 2;
+    if (location.startsWith('/spaces')) return 3;
+    if (location.startsWith('/reports')) return 4;
     return 0;
   }
 
@@ -100,6 +149,12 @@ class MainShell extends StatelessWidget {
                 context.go('/inventory');
                 break;
               case 2:
+                context.go('/coverage');
+                break;
+              case 3:
+                context.go('/spaces');
+                break;
+              case 4:
                 context.go('/reports');
                 break;
             }
@@ -118,9 +173,19 @@ class MainShell extends StatelessWidget {
               label: 'Inventar',
             ),
             NavigationDestination(
-              icon: Icon(Icons.bar_chart_outlined),
-              selectedIcon: Icon(Icons.bar_chart, color: AppColors.primary),
-              label: 'Rapoarte',
+              icon: Icon(Icons.shield_outlined),
+              selectedIcon: Icon(Icons.shield, color: AppColors.primary),
+              label: 'Stări',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.location_on_outlined),
+              selectedIcon: Icon(Icons.location_on, color: AppColors.primary),
+              label: 'Spații',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.file_download_outlined),
+              selectedIcon: Icon(Icons.file_download, color: AppColors.primary),
+              label: 'Export',
             ),
           ],
         ),
@@ -128,4 +193,3 @@ class MainShell extends StatelessWidget {
     );
   }
 }
-

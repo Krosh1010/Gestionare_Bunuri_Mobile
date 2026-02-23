@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient {
   late final Dio _dio;
@@ -6,7 +7,7 @@ class ApiClient {
   ApiClient({String? baseUrl}) {
     _dio = Dio(
       BaseOptions(
-        baseUrl: baseUrl ?? 'http://localhost:8080/api',
+        baseUrl: baseUrl ?? 'http://192.168.1.3:5288/api', // Înlocuiește cu IP-ul local al PC-ului tău!
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 10),
         headers: {
@@ -18,8 +19,12 @@ class ApiClient {
 
     _dio.interceptors.add(
       InterceptorsWrapper(
-        onRequest: (options, handler) {
-          // TODO: Adaugă token-ul de autentificare
+        onRequest: (options, handler) async {
+          final prefs = await SharedPreferences.getInstance();
+          final token = prefs.getString('jwt_token');
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
           return handler.next(options);
         },
         onError: (error, handler) {
@@ -27,6 +32,15 @@ class ApiClient {
         },
       ),
     );
+    // Adaug LogInterceptor pentru logare completă
+    _dio.interceptors.add(LogInterceptor(
+      request: true,
+      requestBody: true,
+      responseBody: true,
+      responseHeader: false,
+      error: true,
+      logPrint: print,
+    ));
   }
 
   Dio get dio => _dio;
@@ -39,4 +53,3 @@ class ApiClient {
     _dio.options.headers.remove('Authorization');
   }
 }
-
