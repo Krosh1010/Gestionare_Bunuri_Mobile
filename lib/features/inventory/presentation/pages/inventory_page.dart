@@ -344,27 +344,63 @@ class _InventoryViewState extends State<_InventoryView> {
         }
 
         if (state is InventoryLoaded) {
-          if (state.filteredAssets.isEmpty) {
-            return SliverFillRemaining(
-              child: _buildEmptyState(context),
-            );
-          }
+          final assets = state.filteredAssets;
+          final page = state.page;
+          final pageSize = state.pageSize;
 
           return SliverPadding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
             sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _AssetListCard(
-                  asset: state.filteredAssets[index],
-                  onTap: _navigateToDetail,
+              delegate: SliverChildListDelegate([
+                if (assets.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Center(child: Text('Nu există bunuri pe această pagină.')),
+                  )
+                else
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: assets.length,
+                    itemBuilder: (context, index) {
+                      final asset = assets[index];
+                      return _AssetListCard(
+                        asset: asset,
+                        onTap: (a) => _navigateToDetail(a),
+                      );
+                    },
+                  ),
+                // PAGINARE - vizibilă mereu!
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left_rounded),
+                        onPressed: page > 1
+                            ? () => context.read<InventoryBloc>().add(LoadAssets(page: page - 1, pageSize: pageSize))
+                            : null,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('Pagina $page', style: Theme.of(context).textTheme.bodyMedium),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right_rounded),
+                        onPressed: assets.length == pageSize
+                            ? () => context.read<InventoryBloc>().add(LoadAssets(page: page + 1, pageSize: pageSize))
+                            : null,
+                      ),
+                    ],
+                  ),
                 ),
-                childCount: state.filteredAssets.length,
-              ),
+              ]),
             ),
           );
         }
 
-        return const SliverToBoxAdapter(child: SizedBox.shrink());
+        return const SliverFillRemaining(child: SizedBox.shrink());
       },
     );
   }

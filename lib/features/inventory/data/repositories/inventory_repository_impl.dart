@@ -8,8 +8,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
   InventoryRepositoryImpl({required this.remoteDataSource});
 
   @override
-  Future<List<Asset>> getAssets() async {
-    return await remoteDataSource.getMyAssets();
+  Future<List<Asset>> getAssets({int page = 1, int pageSize = 1}) async {
+    return await remoteDataSource.getMyAssets(page: page, pageSize: pageSize);
   }
 
   @override

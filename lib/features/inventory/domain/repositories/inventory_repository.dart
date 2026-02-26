@@ -1,7 +1,7 @@
 import '../entities/asset.dart';
 
 abstract class InventoryRepository {
-  Future<List<Asset>> getAssets();
+  Future<List<Asset>> getAssets({int page = 1, int pageSize = 1});
   Future<Asset> getAssetById(String id);
   Future<Asset> addAsset(Map<String, dynamic> data);
   Future<Asset> updateAsset(String id, Map<String, dynamic> data);

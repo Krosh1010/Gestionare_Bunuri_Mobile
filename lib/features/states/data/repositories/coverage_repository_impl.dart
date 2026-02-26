@@ -20,27 +20,27 @@ class CoverageRepositoryImpl implements CoverageRepository {
   }
 
   @override
-  Future<List<CoverageAsset>> getExpiredWarrantyAssets() async {
-    final jsonList = await remoteDataSource.getExpiredWarrantyAssets();
-    return jsonList.map((json) => CoverageAssetModel.fromJson(json)).toList();
+  Future<List<CoverageAsset>> getExpiredWarrantyAssets({int page = 1, int pageSize = 20}) async {
+    final data = await remoteDataSource.getExpiredWarrantyAssets(page: page, pageSize: pageSize);
+    return data.map((json) => CoverageAssetModel.fromJson(json)).toList();
   }
 
   @override
-  Future<List<CoverageAsset>> getValidWarrantyAssets() async {
-    final jsonList = await remoteDataSource.getValidWarrantyAssets();
-    return jsonList.map((json) => CoverageAssetModel.fromJson(json)).toList();
+  Future<List<CoverageAsset>> getValidWarrantyAssets({int page = 1, int pageSize = 20}) async {
+    final data = await remoteDataSource.getValidWarrantyAssets(page: page, pageSize: pageSize);
+    return data.map((json) => CoverageAssetModel.fromJson(json)).toList();
   }
 
   @override
-  Future<List<CoverageAsset>> getExpiringWarrantyAssets() async {
-    final jsonList = await remoteDataSource.getExpiringWarrantyAssets();
-    return jsonList.map((json) => CoverageAssetModel.fromJson(json)).toList();
+  Future<List<CoverageAsset>> getExpiringWarrantyAssets({int page = 1, int pageSize = 20}) async {
+    final data = await remoteDataSource.getExpiringWarrantyAssets(page: page, pageSize: pageSize);
+    return data.map((json) => CoverageAssetModel.fromJson(json)).toList();
   }
 
   @override
-  Future<List<CoverageAsset>> getAssetsWithoutWarranty() async {
-    final jsonList = await remoteDataSource.getAssetsWithoutWarranty();
-    return jsonList.map((json) => CoverageAssetModel.fromJson(json)).toList();
+  Future<List<CoverageAsset>> getAssetsWithoutWarranty({int page = 1, int pageSize = 20}) async {
+    final data = await remoteDataSource.getAssetsWithoutWarranty(page: page, pageSize: pageSize);
+    return data.map((json) => CoverageAssetModel.fromJson(json)).toList();
   }
 
   // ─── Insurance ──────────────────────────────────────────────
@@ -51,26 +51,26 @@ class CoverageRepositoryImpl implements CoverageRepository {
   }
 
   @override
-  Future<List<CoverageAsset>> getExpiredInsuranceAssets() async {
-    final jsonList = await remoteDataSource.getExpiredInsuranceAssets();
-    return jsonList.map((json) => CoverageAssetModel.fromJson(json)).toList();
+  Future<List<CoverageAsset>> getExpiredInsuranceAssets({int page = 1, int pageSize = 20}) async {
+    final data = await remoteDataSource.getExpiredInsuranceAssets(page: page, pageSize: pageSize);
+    return data.map((json) => CoverageAssetModel.fromJson(json)).toList();
   }
 
   @override
-  Future<List<CoverageAsset>> getValidInsuranceAssets() async {
-    final jsonList = await remoteDataSource.getValidInsuranceAssets();
-    return jsonList.map((json) => CoverageAssetModel.fromJson(json)).toList();
+  Future<List<CoverageAsset>> getValidInsuranceAssets({int page = 1, int pageSize = 20}) async {
+    final data = await remoteDataSource.getValidInsuranceAssets(page: page, pageSize: pageSize);
+    return data.map((json) => CoverageAssetModel.fromJson(json)).toList();
   }
 
   @override
-  Future<List<CoverageAsset>> getExpiringInsuranceAssets() async {
-    final jsonList = await remoteDataSource.getExpiringInsuranceAssets();
-    return jsonList.map((json) => CoverageAssetModel.fromJson(json)).toList();
+  Future<List<CoverageAsset>> getExpiringInsuranceAssets({int page = 1, int pageSize = 20}) async {
+    final data = await remoteDataSource.getExpiringInsuranceAssets(page: page, pageSize: pageSize);
+    return data.map((json) => CoverageAssetModel.fromJson(json)).toList();
   }
 
   @override
-  Future<List<CoverageAsset>> getAssetsWithoutInsurance() async {
-    final jsonList = await remoteDataSource.getAssetsWithoutInsurance();
-    return jsonList.map((json) => CoverageAssetModel.fromJson(json)).toList();
+  Future<List<CoverageAsset>> getAssetsWithoutInsurance({int page = 1, int pageSize = 20}) async {
+    final data = await remoteDataSource.getAssetsWithoutInsurance(page: page, pageSize: pageSize);
+    return data.map((json) => CoverageAssetModel.fromJson(json)).toList();
   }
 }

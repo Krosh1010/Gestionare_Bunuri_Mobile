@@ -10,7 +10,13 @@ abstract class InventoryEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class LoadAssets extends InventoryEvent {}
+class LoadAssets extends InventoryEvent {
+  final int page;
+  final int pageSize;
+  const LoadAssets({this.page = 1, this.pageSize = 10});
+  @override
+  List<Object?> get props => [page, pageSize];
+}
 
 class SearchAssets extends InventoryEvent {
   final String query;
@@ -66,6 +72,8 @@ class InventoryLoading extends InventoryState {}
 class InventoryLoaded extends InventoryState {
   final List<Asset> assets;
   final List<Asset> filteredAssets;
+  final int page;
+  final int pageSize;
   final AssetCategory? selectedCategory;
   final String searchQuery;
   final Set<AssetCategory> activeCategories;
@@ -76,6 +84,8 @@ class InventoryLoaded extends InventoryState {
   const InventoryLoaded({
     required this.assets,
     required this.filteredAssets,
+    this.page = 1,
+    this.pageSize = 10,
     this.selectedCategory,
     this.searchQuery = '',
     this.activeCategories = const {},
@@ -100,6 +110,8 @@ class InventoryLoaded extends InventoryState {
   List<Object?> get props => [
         assets,
         filteredAssets,
+        page,
+        pageSize,
         selectedCategory,
         searchQuery,
         activeCategories,
@@ -181,13 +193,15 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
   Future<void> _onLoadAssets(LoadAssets event, Emitter<InventoryState> emit) async {
     emit(InventoryLoading());
     try {
-      final assets = await repository.getAssets();
+      final assets = await repository.getAssets(page: event.page, pageSize: event.pageSize);
       emit(InventoryLoaded(
         assets: assets,
         filteredAssets: assets,
+        page: event.page,
+        pageSize: event.pageSize,
       ));
     } catch (e) {
-      emit(InventoryError('Nu s-au putut încărca bunurile: ${e.toString()}'));
+      emit(InventoryError('Nu s-au putut încărca bunurile:  ${e.toString()}'));
     }
   }
 
@@ -212,6 +226,8 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
         priceMin: s.priceMin,
         priceMax: s.priceMax,
         spaceFilter: s.spaceFilter,
+        page: s.page,
+        pageSize: s.pageSize,
       ));
     }
   }
@@ -237,6 +253,8 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
         priceMin: s.priceMin,
         priceMax: s.priceMax,
         spaceFilter: s.spaceFilter,
+        page: s.page,
+        pageSize: s.pageSize,
       ));
     }
   }
@@ -262,6 +280,8 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
         priceMin: event.priceMin,
         priceMax: event.priceMax,
         spaceFilter: event.spaceFilter,
+        page: s.page,
+        pageSize: s.pageSize,
       ));
     }
   }
@@ -273,6 +293,8 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
         assets: s.assets,
         filteredAssets: s.assets,
         searchQuery: '',
+        page: s.page,
+        pageSize: s.pageSize,
       ));
     }
   }
@@ -293,6 +315,8 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
           priceMin: s.priceMin,
           priceMax: s.priceMax,
           spaceFilter: s.spaceFilter,
+          page: s.page,
+          pageSize: s.pageSize,
         ));
       } catch (e) {
         emit(InventoryError('Nu s-a putut șterge bunul: ${e.toString()}'));
@@ -300,4 +324,3 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
     }
   }
 }
-

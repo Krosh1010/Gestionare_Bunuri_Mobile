@@ -2,7 +2,7 @@ import '../../../../core/network/api_client.dart';
 import '../models/asset_model.dart';
 
 abstract class InventoryRemoteDataSource {
-  Future<List<AssetModel>> getMyAssets();
+  Future<List<AssetModel>> getMyAssets({int page, int pageSize});
   Future<AssetModel> getAssetById(String id);
   Future<AssetModel> addAsset(Map<String, dynamic> data);
   Future<AssetModel> updateAsset(String id, Map<String, dynamic> data);
@@ -24,9 +24,12 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   InventoryRemoteDataSourceImpl({required this.apiClient});
 
   @override
-  Future<List<AssetModel>> getMyAssets() async {
-    final response = await apiClient.dio.get('/Assets/my');
-    final list = response.data as List;
+  Future<List<AssetModel>> getMyAssets({int page = 1, int pageSize = 1}) async {
+    final response = await apiClient.dio.get(
+      '/Assets/my/paged',
+      queryParameters: {'page': page, 'pageSize': pageSize},
+    );
+    final list = response.data['items'] as List;
     return list
         .map((json) => AssetModel.fromJson(json as Map<String, dynamic>))
         .toList();

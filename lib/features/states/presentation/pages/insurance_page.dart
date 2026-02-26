@@ -184,6 +184,35 @@ class InsurancePage extends StatelessWidget {
             ),
           ),
 
+        // ── PAGINATION BUTTONS ──
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  onPressed: state.page > 1
+                      ? () => context.read<InsuranceBloc>().add(
+                          LoadInsuranceAssets(state.activeFilter ?? InsuranceFilter.valid, page: state.page - 1, pageSize: state.pageSize))
+                      : null,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('Pagina ${state.page}', style: Theme.of(context).textTheme.bodyMedium),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  onPressed: state.assets != null && state.assets!.length == state.pageSize && state.activeFilter != null
+                      ? () => context.read<InsuranceBloc>().add(
+                          LoadInsuranceAssets(state.activeFilter!, page: state.page + 1, pageSize: state.pageSize))
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
@@ -818,4 +847,3 @@ class _InfoTag extends StatelessWidget {
     );
   }
 }
-

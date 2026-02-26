@@ -15,12 +15,21 @@ class LoadWarrantySummary extends CoverageEvent {}
 
 class LoadWarrantyAssets extends CoverageEvent {
   final WarrantyFilter filter;
-  const LoadWarrantyAssets(this.filter);
+  final int page;
+  final int pageSize;
+  const LoadWarrantyAssets(this.filter, {this.page = 1, this.pageSize = 10});
   @override
-  List<Object?> get props => [filter];
+  List<Object?> get props => [filter, page, pageSize];
 }
 
 class ClearWarrantyAssets extends CoverageEvent {}
+
+class ChangeWarrantyPage extends CoverageEvent {
+  final int page;
+  const ChangeWarrantyPage(this.page);
+  @override
+  List<Object?> get props => [page];
+}
 
 enum WarrantyFilter { expired, valid, expiringSoon, withoutWarranty }
 
@@ -40,12 +49,16 @@ class CoverageSummaryLoaded extends CoverageState {
   final WarrantyFilter? activeFilter;
   final List<CoverageAsset>? assets;
   final bool assetsLoading;
+  final int page;
+  final int pageSize;
 
   const CoverageSummaryLoaded({
     required this.summary,
     this.activeFilter,
     this.assets,
     this.assetsLoading = false,
+    this.page = 1,
+    this.pageSize = 10,
   });
 
   CoverageSummaryLoaded copyWith({
@@ -53,6 +66,8 @@ class CoverageSummaryLoaded extends CoverageState {
     WarrantyFilter? activeFilter,
     List<CoverageAsset>? assets,
     bool? assetsLoading,
+    int? page,
+    int? pageSize,
     bool clearFilter = false,
   }) {
     return CoverageSummaryLoaded(
@@ -60,11 +75,13 @@ class CoverageSummaryLoaded extends CoverageState {
       activeFilter: clearFilter ? null : (activeFilter ?? this.activeFilter),
       assets: clearFilter ? null : (assets ?? this.assets),
       assetsLoading: assetsLoading ?? this.assetsLoading,
+      page: page ?? this.page,
+      pageSize: pageSize ?? this.pageSize,
     );
   }
 
   @override
-  List<Object?> get props => [summary, activeFilter, assets, assetsLoading];
+  List<Object?> get props => [summary, activeFilter, assets, assetsLoading, page, pageSize];
 }
 
 class CoverageError extends CoverageState {
@@ -82,6 +99,7 @@ class CoverageBloc extends Bloc<CoverageEvent, CoverageState> {
     on<LoadWarrantySummary>(_onLoadWarrantySummary);
     on<LoadWarrantyAssets>(_onLoadWarrantyAssets);
     on<ClearWarrantyAssets>(_onClearWarrantyAssets);
+    on<ChangeWarrantyPage>(_onChangeWarrantyPage);
   }
 
   Future<void> _onLoadWarrantySummary(
@@ -113,16 +131,16 @@ class CoverageBloc extends Bloc<CoverageEvent, CoverageState> {
       List<CoverageAsset> assets;
       switch (event.filter) {
         case WarrantyFilter.expired:
-          assets = await repository.getExpiredWarrantyAssets();
+          assets = await repository.getExpiredWarrantyAssets(page: event.page, pageSize: event.pageSize);
           break;
         case WarrantyFilter.valid:
-          assets = await repository.getValidWarrantyAssets();
+          assets = await repository.getValidWarrantyAssets(page: event.page, pageSize: event.pageSize);
           break;
         case WarrantyFilter.expiringSoon:
-          assets = await repository.getExpiringWarrantyAssets();
+          assets = await repository.getExpiringWarrantyAssets(page: event.page, pageSize: event.pageSize);
           break;
         case WarrantyFilter.withoutWarranty:
-          assets = await repository.getAssetsWithoutWarranty();
+          assets = await repository.getAssetsWithoutWarranty(page: event.page, pageSize: event.pageSize);
           break;
       }
       // Re-read state in case it changed
@@ -150,5 +168,48 @@ class CoverageBloc extends Bloc<CoverageEvent, CoverageState> {
       emit(currentState.copyWith(clearFilter: true));
     }
   }
-}
 
+  Future<void> _onChangeWarrantyPage(
+    ChangeWarrantyPage event,
+    Emitter<CoverageState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! CoverageSummaryLoaded) return;
+    final page = event.page;
+    final pageSize = currentState.pageSize;
+    final filter = currentState.activeFilter;
+    emit(currentState.copyWith(assetsLoading: true, page: page));
+    try {
+      List<CoverageAsset> assets = [];
+      if (filter != null) {
+        switch (filter) {
+          case WarrantyFilter.expired:
+            assets = await repository.getExpiredWarrantyAssets(page: page, pageSize: pageSize);
+            break;
+          case WarrantyFilter.valid:
+            assets = await repository.getValidWarrantyAssets(page: page, pageSize: pageSize);
+            break;
+          case WarrantyFilter.expiringSoon:
+            assets = await repository.getExpiringWarrantyAssets(page: page, pageSize: pageSize);
+            break;
+          case WarrantyFilter.withoutWarranty:
+            assets = await repository.getAssetsWithoutWarranty(page: page, pageSize: pageSize);
+            break;
+        }
+      }
+      final latestState = state;
+      if (latestState is CoverageSummaryLoaded) {
+        emit(latestState.copyWith(
+          assets: assets,
+          assetsLoading: false,
+          page: page,
+        ));
+      }
+    } catch (e) {
+      final latestState = state;
+      if (latestState is CoverageSummaryLoaded) {
+        emit(latestState.copyWith(assetsLoading: false));
+      }
+    }
+  }
+}

@@ -184,6 +184,34 @@ class WarrantyPage extends StatelessWidget {
             ),
           ),
 
+        // ── PAGINATION BUTTONS ──
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: state.page > 1
+                      ? () => context.read<CoverageBloc>().add(ChangeWarrantyPage(state.page - 1))
+                      : null,
+                ),
+                Text(
+                  'Pagina ${state.page}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: state.assets != null && state.assets!.length == state.pageSize
+                      ? () => context.read<CoverageBloc>().add(ChangeWarrantyPage(state.page + 1))
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );

@@ -15,9 +15,11 @@ class LoadInsuranceSummary extends InsuranceEvent {}
 
 class LoadInsuranceAssets extends InsuranceEvent {
   final InsuranceFilter filter;
-  const LoadInsuranceAssets(this.filter);
+  final int page;
+  final int pageSize;
+  const LoadInsuranceAssets(this.filter, {this.page = 1, this.pageSize = 10});
   @override
-  List<Object?> get props => [filter];
+  List<Object?> get props => [filter, page, pageSize];
 }
 
 class ClearInsuranceAssets extends InsuranceEvent {}
@@ -40,12 +42,16 @@ class InsuranceSummaryLoaded extends InsuranceState {
   final InsuranceFilter? activeFilter;
   final List<CoverageAsset>? assets;
   final bool assetsLoading;
+  final int page;
+  final int pageSize;
 
   const InsuranceSummaryLoaded({
     required this.summary,
     this.activeFilter,
     this.assets,
     this.assetsLoading = false,
+    this.page = 1,
+    this.pageSize = 10,
   });
 
   InsuranceSummaryLoaded copyWith({
@@ -53,6 +59,8 @@ class InsuranceSummaryLoaded extends InsuranceState {
     InsuranceFilter? activeFilter,
     List<CoverageAsset>? assets,
     bool? assetsLoading,
+    int? page,
+    int? pageSize,
     bool clearFilter = false,
   }) {
     return InsuranceSummaryLoaded(
@@ -60,11 +68,13 @@ class InsuranceSummaryLoaded extends InsuranceState {
       activeFilter: clearFilter ? null : (activeFilter ?? this.activeFilter),
       assets: clearFilter ? null : (assets ?? this.assets),
       assetsLoading: assetsLoading ?? this.assetsLoading,
+      page: page ?? this.page,
+      pageSize: pageSize ?? this.pageSize,
     );
   }
 
   @override
-  List<Object?> get props => [summary, activeFilter, assets, assetsLoading];
+  List<Object?> get props => [summary, activeFilter, assets, assetsLoading, page, pageSize];
 }
 
 class InsuranceError extends InsuranceState {
@@ -113,16 +123,16 @@ class InsuranceBloc extends Bloc<InsuranceEvent, InsuranceState> {
       List<CoverageAsset> assets;
       switch (event.filter) {
         case InsuranceFilter.expired:
-          assets = await repository.getExpiredInsuranceAssets();
+          assets = await repository.getExpiredInsuranceAssets(page: event.page, pageSize: event.pageSize);
           break;
         case InsuranceFilter.valid:
-          assets = await repository.getValidInsuranceAssets();
+          assets = await repository.getValidInsuranceAssets(page: event.page, pageSize: event.pageSize);
           break;
         case InsuranceFilter.expiringSoon:
-          assets = await repository.getExpiringInsuranceAssets();
+          assets = await repository.getExpiringInsuranceAssets(page: event.page, pageSize: event.pageSize);
           break;
         case InsuranceFilter.withoutInsurance:
-          assets = await repository.getAssetsWithoutInsurance();
+          assets = await repository.getAssetsWithoutInsurance(page: event.page, pageSize: event.pageSize);
           break;
       }
       final latestState = state;
@@ -130,6 +140,7 @@ class InsuranceBloc extends Bloc<InsuranceEvent, InsuranceState> {
         emit(latestState.copyWith(
           assets: assets,
           assetsLoading: false,
+          page: event.page,
         ));
       }
     } catch (e) {
@@ -150,4 +161,3 @@ class InsuranceBloc extends Bloc<InsuranceEvent, InsuranceState> {
     }
   }
 }
-
