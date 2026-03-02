@@ -1,4 +1,4 @@
-package com.example.gestionare_bunuri_mobile
+package com.example.gestionarebunuri
 
 import android.content.ContentValues
 import android.content.Intent
@@ -74,7 +74,6 @@ class MainActivity : FlutterActivity() {
         if (!sourceFile.exists()) return null
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+ — use MediaStore
             val contentValues = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, fileName)
                 put(MediaStore.Downloads.MIME_TYPE, mimeType)
@@ -92,7 +91,6 @@ class MainActivity : FlutterActivity() {
             }
             return uri
         } else {
-            // Android 9 and below — copy directly
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val destFile = File(downloadsDir, fileName)
             sourceFile.copyTo(destFile, overwrite = true)
@@ -109,7 +107,8 @@ class MainActivity : FlutterActivity() {
             }
             startActivity(intent)
         } catch (_: Exception) {
-            // No app to handle the file — silently ignore
+            // No app to handle the file
         }
     }
 }
+

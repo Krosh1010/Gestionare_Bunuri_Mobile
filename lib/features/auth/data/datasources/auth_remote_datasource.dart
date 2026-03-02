@@ -32,8 +32,20 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
   @override
   Future<Map<String, dynamic>> register(String fullName, String email, String password) async {
-    // Implementare similară pentru register dacă e nevoie
-    return {};
+    final response = await apiClient.dio.post(
+      '/Auth/register',
+      data: {
+        'fullName': fullName,
+        'email': email,
+        'password': password,
+      },
+    );
+    final token = response.data['token'] as String?;
+    if (token != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', token);
+    }
+    return response.data as Map<String, dynamic>;
   }
 
   @override

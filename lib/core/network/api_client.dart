@@ -7,7 +7,7 @@ class ApiClient {
   ApiClient({String? baseUrl}) {
     _dio = Dio(
       BaseOptions(
-        baseUrl: baseUrl ?? 'http://192.168.1.3:5288/api', // Înlocuiește cu IP-ul local al PC-ului tău!
+        baseUrl: baseUrl ?? 'http://192.168.1.6:5288/api', // Înlocuiește cu IP-ul local al PC-ului tău!
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 10),
         headers: {

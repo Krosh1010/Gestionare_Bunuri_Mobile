@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/notification_service.dart';
+import '../../../../core/services/fcm_service.dart';
 import '../../data/datasources/auth_remote_datasource.dart';
 
 // Events
@@ -93,8 +94,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final response = await _authRemoteDataSource.login(event.email, event.password);
       final token = response['token'] as String?;
       if (token != null && token.isNotEmpty) {
-        // Pornește verificarea periodică a notificărilor
-        NotificationService.startPeriodicCheck();
+        // Înregistrează tokenul FCM la backend (push notifications prin FCM)
+        await FcmService.registerDeviceToken();
 
         emit(AuthAuthenticated(
           userName: response['userName'] ?? 'Utilizator',
@@ -114,14 +115,25 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     try {
-      // TODO: Implementează logica reală de înregistrare
-      await Future.delayed(const Duration(seconds: 1));
-      emit(AuthAuthenticated(
-        userName: event.fullName,
-        email: event.email,
-      ));
+      final response = await _authRemoteDataSource.register(
+        event.fullName,
+        event.email,
+        event.password,
+      );
+      final token = response['token'] as String?;
+      if (token != null && token.isNotEmpty) {
+        // Înregistrează tokenul FCM la backend (push notifications prin FCM)
+        await FcmService.registerDeviceToken();
+
+        emit(AuthAuthenticated(
+          userName: response['userName'] ?? event.fullName,
+          email: event.email,
+        ));
+      } else {
+        emit(const AuthError('Eroare la înregistrare. Încearcă din nou.'));
+      }
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError('Eroare la înregistrare: ${e.toString()}'));
     }
   }
 
@@ -133,6 +145,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     // Oprește verificarea periodică și curăță notificările
     NotificationService.stopPeriodicCheck();
     await NotificationService.clearShownNotifications();
+
+    // Dezînregistrează tokenul FCM de la backend (înainte de ștergerea JWT-ului)
+    await FcmService.unregisterDeviceToken();
+
     await Future.delayed(const Duration(milliseconds: 500));
     emit(AuthUnauthenticated());
   }

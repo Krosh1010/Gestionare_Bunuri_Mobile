@@ -4,7 +4,6 @@ import '../../domain/usecases/get_parent_spaces_usecase.dart';
 import '../../domain/usecases/get_children_spaces_usecase.dart';
 import '../../domain/usecases/get_notifications_usecase.dart';
 import '../../domain/usecases/delete_notification_usecase.dart';
-import '../../../../core/services/notification_service.dart';
 import '../widgets/locations_card.dart';
 import '../widgets/notifications_card.dart';
 import 'dashboard_state.dart';
@@ -62,13 +61,6 @@ class DashboardCubit extends Cubit<DashboardState> {
             .toList();
       } catch (e) {
         print('⚠️ [Dashboard] Error loading notifications: $e');
-      }
-
-      // Pornește verificarea periodică a notificărilor push
-      try {
-        NotificationService.startPeriodicCheck();
-      } catch (e) {
-        print('⚠️ [Dashboard] Error starting notification check: $e');
       }
 
       emit(DashboardLoaded(

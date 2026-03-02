@@ -27,6 +27,8 @@ class Asset extends Equatable {
   final DateTime? warrantyStartDate;
   final DateTime? warrantyEndDate;
   final String? warrantyProvider;
+  final String? warrantyDocumentFileName;
+  final int? warrantyDocumentId;
 
   // Insurance
   final InsuranceStatus insuranceStatus;
@@ -34,6 +36,8 @@ class Asset extends Equatable {
   final DateTime? insuranceEndDate;
   final String? insuranceCompany;
   final double? insuranceValue;
+  final String? insuranceDocumentFileName;
+  final int? insuranceDocumentId;
 
   const Asset({
     required this.id,
@@ -50,11 +54,15 @@ class Asset extends Equatable {
     this.warrantyStartDate,
     this.warrantyEndDate,
     this.warrantyProvider,
+    this.warrantyDocumentFileName,
+    this.warrantyDocumentId,
     this.insuranceStatus = InsuranceStatus.unknown,
     this.insuranceStartDate,
     this.insuranceEndDate,
     this.insuranceCompany,
     this.insuranceValue,
+    this.insuranceDocumentFileName,
+    this.insuranceDocumentId,
   });
 
   // Convenience getters
@@ -144,10 +152,14 @@ class Asset extends Equatable {
         warrantyStartDate,
         warrantyEndDate,
         warrantyProvider,
+        warrantyDocumentFileName,
+        warrantyDocumentId,
         insuranceStatus,
         insuranceStartDate,
         insuranceEndDate,
         insuranceCompany,
         insuranceValue,
+        insuranceDocumentFileName,
+        insuranceDocumentId,
       ];
 }

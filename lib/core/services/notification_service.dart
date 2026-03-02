@@ -111,7 +111,7 @@ class NotificationService {
       // Apel API direct
       final dio = Dio(
         BaseOptions(
-          baseUrl: 'http://192.168.1.3:5288/api',
+          baseUrl: 'http://192.168.1.6:5288/api',
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
           headers: {

@@ -24,6 +24,10 @@ import '../../features/states/data/repositories/coverage_repository_impl.dart';
 import '../../features/states/domain/repositories/coverage_repository.dart';
 import '../../features/states/presentation/bloc/coverage_bloc.dart';
 import '../../features/states/presentation/bloc/insurance_bloc.dart';
+import '../../features/profile/data/datasource/profile_remote_datasource.dart';
+import '../../features/profile/data/repositories/profile_repository_impl.dart';
+import '../../features/profile/domain/repositories/profile_repository.dart';
+import '../../features/profile/presentation/bloc/profile_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -130,5 +134,21 @@ Future<void> initDependencies() async {
   // Insurance Bloc
   sl.registerFactory(
     () => InsuranceBloc(repository: sl()),
+  );
+
+  // ─── Profile ──────────────────────────────────────────────────
+  // Data sources
+  sl.registerLazySingleton<ProfileRemoteDataSource>(
+    () => ProfileRemoteDataSourceImpl(sl()),
+  );
+
+  // Repositories
+  sl.registerLazySingleton<ProfileRepository>(
+    () => ProfileRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  // Bloc
+  sl.registerFactory(
+    () => ProfileBloc(repository: sl()),
   );
 }

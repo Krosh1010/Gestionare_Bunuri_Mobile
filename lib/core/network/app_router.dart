@@ -14,6 +14,7 @@ import '../../features/inventory/domain/entities/asset.dart';
 import '../../features/reports/presentation/pages/export_page.dart';
 import '../../features/spaces/presentation/pages/spaces_page.dart';
 import '../../features/states/presentation/pages/coverage_status_page.dart';
+import '../../features/profile/presentation/pages/profile_page.dart';
 import '../constants/app_colors.dart';
 import '../di/injection_container.dart';
 
@@ -103,6 +104,11 @@ class AppRouter {
             body: Center(child: Text('Eroare: bunul nu a fost găsit')),
           );
         },
+      ),
+      GoRoute(
+        path: '/profile',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const ProfilePage(),
       ),
     ],
   );

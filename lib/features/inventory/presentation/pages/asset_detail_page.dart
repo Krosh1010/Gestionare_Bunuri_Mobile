@@ -1,6 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injection_container.dart';
@@ -20,6 +24,7 @@ class AssetDetailPage extends StatefulWidget {
 
 class _AssetDetailPageState extends State<AssetDetailPage> {
   late Asset _asset;
+  static const _fileChannel = MethodChannel('com.example.gestionare_bunuri_mobile/file_handler');
 
   @override
   void initState() {
@@ -133,6 +138,256 @@ class _AssetDetailPageState extends State<AssetDetailPage> {
         return const Color(0xFF9CA3AF);
       case InsuranceStatus.unknown:
         return const Color(0xFF9CA3AF);
+    }
+  }
+
+  Future<void> _downloadWarrantyDocument() async {
+    final assetId = int.tryParse(_asset.id);
+    if (assetId == null) return;
+    try {
+      final bytes = await sl<InventoryRepository>().downloadWarrantyDocument(assetId);
+      final fileName = _asset.warrantyDocumentFileName ?? 'warranty_document';
+      await _saveAndOpenFile(bytes, fileName);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fișierul a fost salvat în Descărcări: $fileName'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Eroare la descărcare: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareWarrantyDocument() async {
+    final assetId = int.tryParse(_asset.id);
+    if (assetId == null) return;
+    try {
+      final bytes = await sl<InventoryRepository>().downloadWarrantyDocument(assetId);
+      final dir = await getApplicationDocumentsDirectory();
+      final fileName = _asset.warrantyDocumentFileName ?? 'warranty_document';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+      if (mounted) {
+        await Share.shareXFiles([XFile(file.path)]);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Eroare la partajare: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteWarrantyDocument() async {
+    final assetId = int.tryParse(_asset.id);
+    if (assetId == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Șterge Documentul'),
+        content: const Text('Ești sigur că vrei să ștergi documentul garanției?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Anulează')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Șterge', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await sl<InventoryRepository>().deleteWarrantyDocument(assetId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Documentul garanției a fost șters!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        await _refreshAsset();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Eroare: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadInsuranceDocument() async {
+    final assetId = int.tryParse(_asset.id);
+    if (assetId == null) return;
+    try {
+      final bytes = await sl<InventoryRepository>().downloadInsuranceDocument(assetId);
+      final fileName = _asset.insuranceDocumentFileName ?? 'insurance_document';
+      await _saveAndOpenFile(bytes, fileName);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fișierul a fost salvat în Descărcări: $fileName'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Eroare la descărcare: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareInsuranceDocument() async {
+    final assetId = int.tryParse(_asset.id);
+    if (assetId == null) return;
+    try {
+      final bytes = await sl<InventoryRepository>().downloadInsuranceDocument(assetId);
+      final dir = await getApplicationDocumentsDirectory();
+      final fileName = _asset.insuranceDocumentFileName ?? 'insurance_document';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+      if (mounted) {
+        await Share.shareXFiles([XFile(file.path)]);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Eroare la partajare: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteInsuranceDocument() async {
+    final assetId = int.tryParse(_asset.id);
+    if (assetId == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Șterge Documentul'),
+        content: const Text('Ești sigur că vrei să ștergi documentul asigurării?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Anulează')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Șterge', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await sl<InventoryRepository>().deleteInsuranceDocument(assetId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Documentul asigurării a fost șters!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        await _refreshAsset();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Eroare: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveAndOpenFile(List<int> bytes, String fileName) async {
+    final dir = await getTemporaryDirectory();
+    final filePath = '${dir.path}/$fileName';
+    final file = File(filePath);
+    await file.writeAsBytes(bytes, flush: true);
+
+    final mimeType = _getMimeType(fileName);
+
+    await _fileChannel.invokeMethod('saveAndOpenFile', {
+      'filePath': filePath,
+      'fileName': fileName,
+      'mimeType': mimeType,
+    });
+  }
+
+  String _getMimeType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'txt':
+        return 'text/plain';
+      case 'csv':
+        return 'text/csv';
+      default:
+        return 'application/octet-stream';
     }
   }
 
@@ -376,6 +631,60 @@ class _AssetDetailPageState extends State<AssetDetailPage> {
                           value: '${asset.warrantyDaysLeft} zile',
                         ),
                       ],
+                      if (asset.warrantyDocumentFileName != null) ...[
+                        const Divider(height: 24),
+                        _DetailRow(
+                          icon: Icons.description_rounded,
+                          label: 'Document atașat',
+                          value: asset.warrantyDocumentFileName!,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _downloadWarrantyDocument,
+                                icon: const Icon(Icons.download_rounded, size: 18),
+                                label: const Text('Descarcă'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF4F46E5),
+                                  side: const BorderSide(color: Color(0xFF4F46E5)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _shareWarrantyDocument,
+                                icon: const Icon(Icons.share_rounded, size: 18),
+                                label: const Text('Trimite'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF4F46E5),
+                                  side: const BorderSide(color: Color(0xFF4F46E5)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 48,
+                              child: OutlinedButton(
+                                onPressed: _deleteWarrantyDocument,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.error,
+                                  side: const BorderSide(color: AppColors.error),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                                child: const Icon(Icons.delete_outline_rounded, size: 18),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -442,6 +751,60 @@ class _AssetDetailPageState extends State<AssetDetailPage> {
                           icon: Icons.timer_rounded,
                           label: 'Zile rămase',
                           value: '${asset.insuranceDaysLeft} zile',
+                        ),
+                      ],
+                      if (asset.insuranceDocumentFileName != null) ...[
+                        const Divider(height: 24),
+                        _DetailRow(
+                          icon: Icons.description_rounded,
+                          label: 'Document atașat',
+                          value: asset.insuranceDocumentFileName!,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _downloadInsuranceDocument,
+                                icon: const Icon(Icons.download_rounded, size: 18),
+                                label: const Text('Descarcă'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF22C55E),
+                                  side: const BorderSide(color: Color(0xFF22C55E)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _shareInsuranceDocument,
+                                icon: const Icon(Icons.share_rounded, size: 18),
+                                label: const Text('Trimite'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF22C55E),
+                                  side: const BorderSide(color: Color(0xFF22C55E)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 48,
+                              child: OutlinedButton(
+                                onPressed: _deleteInsuranceDocument,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.error,
+                                  side: const BorderSide(color: AppColors.error),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                                child: const Icon(Icons.delete_outline_rounded, size: 18),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ],

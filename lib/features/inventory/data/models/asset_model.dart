@@ -16,11 +16,15 @@ class AssetModel extends Asset {
     super.warrantyStartDate,
     super.warrantyEndDate,
     super.warrantyProvider,
+    super.warrantyDocumentFileName,
+    super.warrantyDocumentId,
     super.insuranceStatus,
     super.insuranceStartDate,
     super.insuranceEndDate,
     super.insuranceCompany,
     super.insuranceValue,
+    super.insuranceDocumentFileName,
+    super.insuranceDocumentId,
   });
 
   /// Maps API category string to enum
@@ -97,11 +101,15 @@ class AssetModel extends Asset {
       warrantyStartDate: _parseDate(json['warrantyStartDate']),
       warrantyEndDate: _parseDate(json['warrantyEndDate']),
       warrantyProvider: json['warrantyProvider'] as String?,
+      warrantyDocumentFileName: json['warrantyDocumentFileName'] as String?,
+      warrantyDocumentId: json['warrantyDocumentId'] as int?,
       insuranceStatus: _mapInsuranceStatus(json['insuranceStatus']),
       insuranceStartDate: _parseDate(json['insuranceStartDate']),
       insuranceEndDate: _parseDate(json['insuranceEndDate']),
       insuranceCompany: json['insuranceCompany'] as String?,
       insuranceValue: (json['insuranceValue'] as num?)?.toDouble(),
+      insuranceDocumentFileName: json['insuranceDocumentFileName'] as String?,
+      insuranceDocumentId: json['insuranceDocumentId'] as int?,
     );
   }
 
@@ -169,4 +177,3 @@ class AssetModel extends Asset {
     }
   }
 }
-

@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:typed_data';
 import '../../domain/entities/asset.dart';
 import '../../domain/repositories/inventory_repository.dart';
 import '../datasources/inventory_remote_datasource.dart';
@@ -33,13 +35,13 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<void> addWarranty(Map<String, dynamic> data) async {
-    await remoteDataSource.addWarranty(data);
+  Future<void> addWarranty(Map<String, dynamic> data, {File? document}) async {
+    await remoteDataSource.addWarranty(data, document: document);
   }
 
   @override
-  Future<void> addInsurance(Map<String, dynamic> data) async {
-    await remoteDataSource.addInsurance(data);
+  Future<void> addInsurance(Map<String, dynamic> data, {File? document}) async {
+    await remoteDataSource.addInsurance(data, document: document);
   }
 
   @override
@@ -53,8 +55,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<void> updateWarrantyByAsset(int assetId, Map<String, dynamic> data) async {
-    await remoteDataSource.updateWarrantyByAsset(assetId, data);
+  Future<void> updateWarrantyByAsset(int assetId, Map<String, dynamic> data, {File? document}) async {
+    await remoteDataSource.updateWarrantyByAsset(assetId, data, document: document);
   }
 
   @override
@@ -63,8 +65,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<void> updateInsuranceByAsset(int assetId, Map<String, dynamic> data) async {
-    await remoteDataSource.updateInsuranceByAsset(assetId, data);
+  Future<void> updateInsuranceByAsset(int assetId, Map<String, dynamic> data, {File? document}) async {
+    await remoteDataSource.updateInsuranceByAsset(assetId, data, document: document);
   }
 
   @override
@@ -75,5 +77,25 @@ class InventoryRepositoryImpl implements InventoryRepository {
   @override
   Future<void> deleteInsuranceByAsset(int assetId) async {
     await remoteDataSource.deleteInsuranceByAsset(assetId);
+  }
+
+  @override
+  Future<Uint8List> downloadWarrantyDocument(int assetId) async {
+    return await remoteDataSource.downloadWarrantyDocument(assetId);
+  }
+
+  @override
+  Future<void> deleteWarrantyDocument(int assetId) async {
+    await remoteDataSource.deleteWarrantyDocument(assetId);
+  }
+
+  @override
+  Future<Uint8List> downloadInsuranceDocument(int assetId) async {
+    return await remoteDataSource.downloadInsuranceDocument(assetId);
+  }
+
+  @override
+  Future<void> deleteInsuranceDocument(int assetId) async {
+    await remoteDataSource.deleteInsuranceDocument(assetId);
   }
 }

@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/inventory_repository.dart';
@@ -16,12 +20,19 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
   final _formKey = GlobalKey<FormState>();
   final _companyController = TextEditingController();
   final _valueController = TextEditingController();
+  static const _fileChannel = MethodChannel('com.example.gestionare_bunuri_mobile/file_handler');
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now().add(const Duration(days: 365));
   bool _isSaving = false;
   bool _isLoading = true;
   bool _hasExisting = false;
   bool _isDeleting = false;
+
+  // Document
+  File? _selectedDocument;
+  String? _existingDocumentFileName;
+  bool _isDeletingDocument = false;
+  bool _isDownloading = false;
 
   @override
   void initState() {
@@ -46,6 +57,7 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
           if (data['endDate'] != null) {
             _endDate = DateTime.tryParse(data['endDate'].toString()) ?? _endDate;
           }
+          _existingDocumentFileName = data['documentFileName'] as String?;
           _isLoading = false;
         });
       } else {
@@ -95,6 +107,132 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
     }
   }
 
+  Future<void> _pickDocument() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
+    );
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _selectedDocument = File(result.files.single.path!);
+      });
+    }
+  }
+
+  Future<void> _downloadDocument() async {
+    setState(() => _isDownloading = true);
+    try {
+      final bytes = await sl<InventoryRepository>().downloadInsuranceDocument(widget.assetId);
+      final fileName = _existingDocumentFileName ?? 'insurance_document';
+
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/$fileName';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes, flush: true);
+
+      final mimeType = _getMimeType(fileName);
+
+      await _fileChannel.invokeMethod('saveAndOpenFile', {
+        'filePath': filePath,
+        'fileName': fileName,
+        'mimeType': mimeType,
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fișierul a fost salvat în Descărcări: $fileName'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Eroare la descărcare: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
+    }
+  }
+
+  String _getMimeType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf': return 'application/pdf';
+      case 'doc': return 'application/msword';
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls': return 'application/vnd.ms-excel';
+      case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'png': return 'image/png';
+      case 'txt': return 'text/plain';
+      default: return 'application/octet-stream';
+    }
+  }
+
+  Future<void> _deleteDocument() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Șterge Documentul'),
+        content: const Text('Ești sigur că vrei să ștergi documentul atașat?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Anulează'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Șterge', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _isDeletingDocument = true);
+    try {
+      await sl<InventoryRepository>().deleteInsuranceDocument(widget.assetId);
+      if (mounted) {
+        setState(() {
+          _existingDocumentFileName = null;
+          _isDeletingDocument = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Documentul a fost șters!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isDeletingDocument = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Eroare la ștergerea documentului: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
   String _formatDate(DateTime d) => DateFormat('dd.MM.yyyy').format(d);
   String _apiDate(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
 
@@ -112,9 +250,16 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
       };
 
       if (_hasExisting) {
-        await sl<InventoryRepository>().updateInsuranceByAsset(widget.assetId, payload);
+        await sl<InventoryRepository>().updateInsuranceByAsset(
+          widget.assetId,
+          payload,
+          document: _selectedDocument,
+        );
       } else {
-        await sl<InventoryRepository>().addInsurance(payload);
+        await sl<InventoryRepository>().addInsurance(
+          payload,
+          document: _selectedDocument,
+        );
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -311,6 +456,10 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
                       date: _endDate,
                       onTap: () => _pickDate(false),
                     ),
+                    const SizedBox(height: 16),
+
+                    // Document section
+                    _buildDocumentSection(),
                     const SizedBox(height: 28),
 
                     // Salvare
@@ -369,6 +518,170 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildDocumentSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.attach_file_rounded, color: AppColors.textHint, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Document atașat',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'opțional',
+                style: TextStyle(fontSize: 11, color: AppColors.textHint),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Existing document on server
+          if (_existingDocumentFileName != null && _selectedDocument == null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF22C55E).withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.description_rounded, color: Color(0xFF22C55E), size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _existingDocumentFileName!,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF22C55E)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _isDownloading ? null : _downloadDocument,
+                    icon: _isDownloading
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF22C55E)),
+                          )
+                        : const Icon(Icons.download_rounded, size: 18),
+                    label: Text(_isDownloading ? 'Se descarcă...' : 'Descarcă'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF22C55E),
+                      side: const BorderSide(color: Color(0xFF22C55E)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _isDeletingDocument ? null : _deleteDocument,
+                    icon: _isDeletingDocument
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error),
+                          )
+                        : const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: Text(_isDeletingDocument ? 'Se șterge...' : 'Șterge'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: const BorderSide(color: AppColors.error),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDocument,
+                    icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                    label: const Text('Înlocuiește'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                      side: const BorderSide(color: AppColors.divider),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ]
+          // Newly selected document
+          else if (_selectedDocument != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _selectedDocument!.path.split(Platform.pathSeparator).last,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => _selectedDocument = null),
+                    icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textHint),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+          ]
+          // No document
+          else ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _pickDocument,
+                icon: const Icon(Icons.upload_file_rounded, size: 20),
+                label: const Text('Selectează document'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                  side: const BorderSide(color: AppColors.divider),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

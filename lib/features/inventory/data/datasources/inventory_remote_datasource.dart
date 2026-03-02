@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import '../../../../core/network/api_client.dart';
 import '../models/asset_model.dart';
 
@@ -7,15 +10,19 @@ abstract class InventoryRemoteDataSource {
   Future<AssetModel> addAsset(Map<String, dynamic> data);
   Future<AssetModel> updateAsset(String id, Map<String, dynamic> data);
   Future<void> deleteAsset(String id);
-  Future<void> addWarranty(Map<String, dynamic> data);
-  Future<void> addInsurance(Map<String, dynamic> data);
+  Future<void> addWarranty(Map<String, dynamic> data, {File? document});
+  Future<void> addInsurance(Map<String, dynamic> data, {File? document});
   Future<List<Map<String, dynamic>>> getSpacePath(int spaceId);
   Future<Map<String, dynamic>?> getWarrantyByAsset(int assetId);
-  Future<void> updateWarrantyByAsset(int assetId, Map<String, dynamic> data);
+  Future<void> updateWarrantyByAsset(int assetId, Map<String, dynamic> data, {File? document});
   Future<Map<String, dynamic>?> getInsuranceByAsset(int assetId);
-  Future<void> updateInsuranceByAsset(int assetId, Map<String, dynamic> data);
+  Future<void> updateInsuranceByAsset(int assetId, Map<String, dynamic> data, {File? document});
   Future<void> deleteWarrantyByAsset(int assetId);
   Future<void> deleteInsuranceByAsset(int assetId);
+  Future<Uint8List> downloadWarrantyDocument(int assetId);
+  Future<void> deleteWarrantyDocument(int assetId);
+  Future<Uint8List> downloadInsuranceDocument(int assetId);
+  Future<void> deleteInsuranceDocument(int assetId);
 }
 
 class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
@@ -59,13 +66,36 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   }
 
   @override
-  Future<void> addWarranty(Map<String, dynamic> data) async {
-    await apiClient.dio.post('/Warranty/create', data: data);
+  Future<void> addWarranty(Map<String, dynamic> data, {File? document}) async {
+    final formData = FormData.fromMap({
+      'AssetId': data['assetId'],
+      'Provider': data['provider'],
+      'StartDate': data['startDate'],
+      'EndDate': data['endDate'],
+      if (document != null)
+        'document': await MultipartFile.fromFile(
+          document.path,
+          filename: document.path.split(Platform.pathSeparator).last,
+        ),
+    });
+    await apiClient.dio.post('/Warranty/create', data: formData);
   }
 
   @override
-  Future<void> addInsurance(Map<String, dynamic> data) async {
-    await apiClient.dio.post('/Insurance/create', data: data);
+  Future<void> addInsurance(Map<String, dynamic> data, {File? document}) async {
+    final formData = FormData.fromMap({
+      'AssetId': data['assetId'],
+      'Company': data['company'],
+      'InsuredValue': data['insuredValue'],
+      'StartDate': data['startDate'],
+      'EndDate': data['endDate'],
+      if (document != null)
+        'document': await MultipartFile.fromFile(
+          document.path,
+          filename: document.path.split(Platform.pathSeparator).last,
+        ),
+    });
+    await apiClient.dio.post('/Insurance/create', data: formData);
   }
 
   @override
@@ -87,8 +117,19 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   }
 
   @override
-  Future<void> updateWarrantyByAsset(int assetId, Map<String, dynamic> data) async {
-    await apiClient.dio.patch('/Warranty/by-asset/$assetId', data: data);
+  Future<void> updateWarrantyByAsset(int assetId, Map<String, dynamic> data, {File? document}) async {
+    final formMap = <String, dynamic>{};
+    if (data.containsKey('provider')) formMap['Provider'] = data['provider'];
+    if (data.containsKey('startDate')) formMap['StartDate'] = data['startDate'];
+    if (data.containsKey('endDate')) formMap['EndDate'] = data['endDate'];
+    if (document != null) {
+      formMap['document'] = await MultipartFile.fromFile(
+        document.path,
+        filename: document.path.split(Platform.pathSeparator).last,
+      );
+    }
+    final formData = FormData.fromMap(formMap);
+    await apiClient.dio.patch('/Warranty/by-asset/$assetId', data: formData);
   }
 
   @override
@@ -103,8 +144,20 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   }
 
   @override
-  Future<void> updateInsuranceByAsset(int assetId, Map<String, dynamic> data) async {
-    await apiClient.dio.patch('/Insurance/by-asset/$assetId', data: data);
+  Future<void> updateInsuranceByAsset(int assetId, Map<String, dynamic> data, {File? document}) async {
+    final formMap = <String, dynamic>{};
+    if (data.containsKey('company')) formMap['Company'] = data['company'];
+    if (data.containsKey('insuredValue')) formMap['InsuredValue'] = data['insuredValue'];
+    if (data.containsKey('startDate')) formMap['StartDate'] = data['startDate'];
+    if (data.containsKey('endDate')) formMap['EndDate'] = data['endDate'];
+    if (document != null) {
+      formMap['document'] = await MultipartFile.fromFile(
+        document.path,
+        filename: document.path.split(Platform.pathSeparator).last,
+      );
+    }
+    final formData = FormData.fromMap(formMap);
+    await apiClient.dio.patch('/Insurance/by-asset/$assetId', data: formData);
   }
 
   @override
@@ -115,5 +168,33 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   @override
   Future<void> deleteInsuranceByAsset(int assetId) async {
     await apiClient.dio.delete('/Insurance/by-asset/$assetId');
+  }
+
+  @override
+  Future<Uint8List> downloadWarrantyDocument(int assetId) async {
+    final response = await apiClient.dio.get(
+      '/Warranty/by-asset/$assetId/document/download',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data as List<int>);
+  }
+
+  @override
+  Future<void> deleteWarrantyDocument(int assetId) async {
+    await apiClient.dio.delete('/Warranty/by-asset/$assetId/document');
+  }
+
+  @override
+  Future<Uint8List> downloadInsuranceDocument(int assetId) async {
+    final response = await apiClient.dio.get(
+      '/Insurance/by-asset/$assetId/document/download',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data as List<int>);
+  }
+
+  @override
+  Future<void> deleteInsuranceDocument(int assetId) async {
+    await apiClient.dio.delete('/Insurance/by-asset/$assetId/document');
   }
 }
