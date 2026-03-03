@@ -13,6 +13,7 @@ import '../../features/inventory/data/datasources/inventory_remote_datasource.da
 import '../../features/inventory/data/repositories/inventory_repository_impl.dart';
 import '../../features/inventory/domain/repositories/inventory_repository.dart';
 import '../../features/inventory/presentation/bloc/inventory_bloc.dart';
+import '../../features/inventory/presentation/bloc/asset_detail_cubit.dart';
 import '../../features/reports/data/datasources/export_remote_datasource.dart';
 import '../../features/reports/data/repositories/export_repository.dart';
 import '../../features/spaces/data/datasources/spaces_remote_datasource.dart';
@@ -88,6 +89,11 @@ Future<void> initDependencies() async {
   // Bloc
   sl.registerFactory(
     () => InventoryBloc(repository: sl()),
+  );
+
+  // Asset Detail Cubit
+  sl.registerFactory(
+    () => AssetDetailCubit(repository: sl()),
   );
 
   // ─── Reports / Export ─────────────────────────────────────────

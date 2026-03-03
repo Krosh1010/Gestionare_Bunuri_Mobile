@@ -10,6 +10,7 @@ import '../../features/inventory/presentation/pages/add_asset_page.dart';
 import '../../features/inventory/presentation/pages/asset_detail_page.dart';
 import '../../features/inventory/presentation/pages/post_save_menu_page.dart';
 import '../../features/inventory/presentation/pages/edit_asset_page.dart';
+import '../../features/inventory/presentation/bloc/asset_detail_cubit.dart';
 import '../../features/inventory/domain/entities/asset.dart';
 import '../../features/reports/presentation/pages/export_page.dart';
 import '../../features/spaces/presentation/pages/spaces_page.dart';
@@ -95,13 +96,10 @@ class AppRouter {
         path: '/inventory/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-          final asset = state.extra;
-          if (asset is Asset) {
-            return AssetDetailPage(asset: asset);
-          }
-          // Fallback - nu ar trebui să ajungem aici
-          return const Scaffold(
-            body: Center(child: Text('Eroare: bunul nu a fost găsit')),
+          final assetId = state.pathParameters['id']!;
+          return BlocProvider(
+            create: (_) => sl<AssetDetailCubit>()..loadAssetDetail(assetId),
+            child: AssetDetailPage(assetId: assetId),
           );
         },
       ),

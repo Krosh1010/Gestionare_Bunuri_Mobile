@@ -7,6 +7,8 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/entities/asset.dart';
 import '../bloc/inventory_bloc.dart';
+import '../../../spaces/domain/entities/space.dart';
+import '../../../spaces/domain/repositories/spaces_repository.dart';
 
 class InventoryPage extends StatelessWidget {
   const InventoryPage({super.key});
@@ -44,7 +46,7 @@ class _InventoryViewState extends State<_InventoryView> {
   }
 
   Future<void> _navigateToDetail(Asset asset) async {
-    await context.push('/inventory/${asset.id}', extra: asset);
+    await context.push('/inventory/${asset.id}');
     if (mounted) {
       context.read<InventoryBloc>().add(LoadAssets());
     }
@@ -159,7 +161,7 @@ class _InventoryViewState extends State<_InventoryView> {
               Expanded(
                 child: _StatCard(
                   emoji: '📦',
-                  value: '${state.totalAssets}',
+                  value: '${state.totalCount}',
                   label: 'Total bunuri',
                   gradient: const [Color(0xFF667EEA), Color(0xFF764BA2)],
                 ),
@@ -379,7 +381,17 @@ class _InventoryViewState extends State<_InventoryView> {
                       IconButton(
                         icon: const Icon(Icons.chevron_left_rounded),
                         onPressed: page > 1
-                            ? () => context.read<InventoryBloc>().add(LoadAssets(page: page - 1, pageSize: pageSize))
+                            ? () => context.read<InventoryBloc>().add(LoadAssets(
+                                  page: page - 1,
+                                  pageSize: pageSize,
+                                  name: state.searchQuery.isNotEmpty ? state.searchQuery : null,
+                                  category: state.selectedCategory?.name ??
+                                      (state.activeCategories.isNotEmpty ? state.activeCategories.first.name : null),
+                                  minValue: state.priceMin,
+                                  maxValue: state.priceMax,
+                                  spaceId: state.selectedSpaceId,
+                                  spaceName: state.selectedSpaceName,
+                                ))
                             : null,
                       ),
                       Padding(
@@ -389,7 +401,17 @@ class _InventoryViewState extends State<_InventoryView> {
                       IconButton(
                         icon: const Icon(Icons.chevron_right_rounded),
                         onPressed: assets.length == pageSize
-                            ? () => context.read<InventoryBloc>().add(LoadAssets(page: page + 1, pageSize: pageSize))
+                            ? () => context.read<InventoryBloc>().add(LoadAssets(
+                                  page: page + 1,
+                                  pageSize: pageSize,
+                                  name: state.searchQuery.isNotEmpty ? state.searchQuery : null,
+                                  category: state.selectedCategory?.name ??
+                                      (state.activeCategories.isNotEmpty ? state.activeCategories.first.name : null),
+                                  minValue: state.priceMin,
+                                  maxValue: state.priceMax,
+                                  spaceId: state.selectedSpaceId,
+                                  spaceName: state.selectedSpaceName,
+                                ))
                             : null,
                       ),
                     ],
@@ -468,13 +490,15 @@ class _InventoryViewState extends State<_InventoryView> {
     Set<AssetCategory> selectedCategories = {};
     double? priceMin;
     double? priceMax;
-    final locationController = TextEditingController();
+    int? selectedSpaceId;
+    String? selectedSpaceName;
 
     if (state is InventoryLoaded) {
       selectedCategories = Set.from(state.activeCategories);
       priceMin = state.priceMin;
       priceMax = state.priceMax;
-      locationController.text = state.spaceFilter ?? '';
+      selectedSpaceId = state.selectedSpaceId;
+      selectedSpaceName = state.selectedSpaceName;
     }
 
     final priceMinController = TextEditingController(
@@ -491,7 +515,7 @@ class _InventoryViewState extends State<_InventoryView> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) => Container(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
+            maxHeight: MediaQuery.of(context).size.height * 0.9,
           ),
           decoration: const BoxDecoration(
             color: AppColors.surface,
@@ -541,7 +565,7 @@ class _InventoryViewState extends State<_InventoryView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Category filter
+                      // ── Category ──
                       _FilterSectionTitle(emoji: '📊', title: 'Categorie'),
                       const SizedBox(height: 10),
                       Wrap(
@@ -549,123 +573,109 @@ class _InventoryViewState extends State<_InventoryView> {
                         runSpacing: 8,
                         children: [
                           _AdvancedFilterChip(
-                            emoji: '💻',
-                            label: 'Electronice',
+                            emoji: '💻', label: 'Electronice',
                             isSelected: selectedCategories.contains(AssetCategory.electronics),
-                            onTap: () => setModalState(() {
-                              if (selectedCategories.contains(AssetCategory.electronics)) {
-                                selectedCategories.remove(AssetCategory.electronics);
-                              } else {
-                                selectedCategories.add(AssetCategory.electronics);
-                              }
-                            }),
+                            onTap: () => setModalState(() => selectedCategories.contains(AssetCategory.electronics)
+                                ? selectedCategories.remove(AssetCategory.electronics)
+                                : selectedCategories.add(AssetCategory.electronics)),
                           ),
                           _AdvancedFilterChip(
-                            emoji: '🛋️',
-                            label: 'Mobilier',
+                            emoji: '🛋️', label: 'Mobilier',
                             isSelected: selectedCategories.contains(AssetCategory.furniture),
-                            onTap: () => setModalState(() {
-                              if (selectedCategories.contains(AssetCategory.furniture)) {
-                                selectedCategories.remove(AssetCategory.furniture);
-                              } else {
-                                selectedCategories.add(AssetCategory.furniture);
-                              }
-                            }),
+                            onTap: () => setModalState(() => selectedCategories.contains(AssetCategory.furniture)
+                                ? selectedCategories.remove(AssetCategory.furniture)
+                                : selectedCategories.add(AssetCategory.furniture)),
                           ),
                           _AdvancedFilterChip(
-                            emoji: '🚗',
-                            label: 'Vehicule',
+                            emoji: '🚗', label: 'Vehicule',
                             isSelected: selectedCategories.contains(AssetCategory.vehicles),
-                            onTap: () => setModalState(() {
-                              if (selectedCategories.contains(AssetCategory.vehicles)) {
-                                selectedCategories.remove(AssetCategory.vehicles);
-                              } else {
-                                selectedCategories.add(AssetCategory.vehicles);
-                              }
-                            }),
+                            onTap: () => setModalState(() => selectedCategories.contains(AssetCategory.vehicles)
+                                ? selectedCategories.remove(AssetCategory.vehicles)
+                                : selectedCategories.add(AssetCategory.vehicles)),
                           ),
                           _AdvancedFilterChip(
-                            emoji: '📄',
-                            label: 'Documente',
+                            emoji: '📄', label: 'Documente',
                             isSelected: selectedCategories.contains(AssetCategory.documents),
-                            onTap: () => setModalState(() {
-                              if (selectedCategories.contains(AssetCategory.documents)) {
-                                selectedCategories.remove(AssetCategory.documents);
-                              } else {
-                                selectedCategories.add(AssetCategory.documents);
-                              }
-                            }),
+                            onTap: () => setModalState(() => selectedCategories.contains(AssetCategory.documents)
+                                ? selectedCategories.remove(AssetCategory.documents)
+                                : selectedCategories.add(AssetCategory.documents)),
                           ),
                           _AdvancedFilterChip(
-                            emoji: '📁',
-                            label: 'Altele',
+                            emoji: '📁', label: 'Altele',
                             isSelected: selectedCategories.contains(AssetCategory.other),
-                            onTap: () => setModalState(() {
-                              if (selectedCategories.contains(AssetCategory.other)) {
-                                selectedCategories.remove(AssetCategory.other);
-                              } else {
-                                selectedCategories.add(AssetCategory.other);
-                              }
-                            }),
+                            onTap: () => setModalState(() => selectedCategories.contains(AssetCategory.other)
+                                ? selectedCategories.remove(AssetCategory.other)
+                                : selectedCategories.add(AssetCategory.other)),
                           ),
                         ],
                       ),
                       const SizedBox(height: 20),
                       Divider(color: AppColors.divider.withValues(alpha: 0.3)),
                       const SizedBox(height: 16),
-                      // Price range
+                      // ── Price ──
                       _FilterSectionTitle(emoji: '💰', title: 'Preț (RON)'),
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Expanded(
-                            child: _PriceInput(
-                              label: 'Min',
-                              controller: priceMinController,
-                              hint: '0',
-                            ),
-                          ),
+                          Expanded(child: _PriceInput(label: 'Min', controller: priceMinController, hint: '0')),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Text('—', style: TextStyle(color: AppColors.textHint, fontSize: 18)),
                           ),
-                          Expanded(
-                            child: _PriceInput(
-                              label: 'Max',
-                              controller: priceMaxController,
-                              hint: '∞',
-                            ),
-                          ),
+                          Expanded(child: _PriceInput(label: 'Max', controller: priceMaxController, hint: '∞')),
                         ],
                       ),
                       const SizedBox(height: 20),
                       Divider(color: AppColors.divider.withValues(alpha: 0.3)),
                       const SizedBox(height: 16),
-                      // Location
+                      // ── Location picker ──
                       _FilterSectionTitle(emoji: '📍', title: 'Locație'),
                       const SizedBox(height: 10),
-                      TextField(
-                        controller: locationController,
-                        decoration: InputDecoration(
-                          hintText: 'Caută locație...',
-                          hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
-                          prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.textHint, size: 20),
-                          filled: true,
-                          fillColor: AppColors.background,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                      // Show currently selected space as a chip
+                      if (selectedSpaceId != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.primary, width: 1.5),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.location_on_rounded, color: AppColors.primary, size: 16),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    selectedSpaceName ?? 'Spațiu #$selectedSpaceId',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () => setModalState(() {
+                                    selectedSpaceId = null;
+                                    selectedSpaceName = null;
+                                  }),
+                                  child: const Icon(Icons.close_rounded, color: AppColors.primary, size: 16),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
+                      // 2-level space picker
+                      _SpacePicker(
+                        initialSpaceId: selectedSpaceId,
+                        onSpaceSelected: (id, name) => setModalState(() {
+                          selectedSpaceId = id;
+                          selectedSpaceName = name;
+                        }),
                       ),
                       const SizedBox(height: 24),
                     ],
@@ -677,9 +687,7 @@ class _InventoryViewState extends State<_InventoryView> {
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
                 decoration: BoxDecoration(
                   color: AppColors.background,
-                  border: Border(
-                    top: BorderSide(color: AppColors.divider.withValues(alpha: 0.3)),
-                  ),
+                  border: Border(top: BorderSide(color: AppColors.divider.withValues(alpha: 0.3))),
                 ),
                 child: Row(
                   children: [
@@ -710,7 +718,8 @@ class _InventoryViewState extends State<_InventoryView> {
                             categories: selectedCategories,
                             priceMin: pMin,
                             priceMax: pMax,
-                            spaceFilter: locationController.text.isNotEmpty ? locationController.text : null,
+                            spaceId: selectedSpaceId,
+                            spaceName: selectedSpaceName,
                           ));
                           Navigator.pop(ctx);
                         },
@@ -1160,7 +1169,9 @@ class _AssetListCard extends StatelessWidget {
                 color: AppColors.background.withValues(alpha: 0.5),
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(17)),
               ),
-              child: Row(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
                 children: [
                   // Warranty badge
                   _WarrantyBadge(
@@ -1168,12 +1179,19 @@ class _AssetListCard extends StatelessWidget {
                     label: asset.warrantyStatusLabel,
                     status: asset.warrantyStatus,
                   ),
-                  const SizedBox(width: 8),
                   // Insurance badge
                   _InsuranceBadge(
                     emoji: '📄',
                     label: asset.insuranceStatusLabel,
                     status: asset.insuranceStatus,
+                  ),
+                  // Custom Tracker badge
+                  _CustomTrackerBadge(
+                    emoji: '🎯',
+                    label: asset.customTrackerName != null
+                        ? '${asset.customTrackerName}: ${asset.customTrackerStatusLabel}'
+                        : asset.customTrackerStatusLabel,
+                    status: asset.customTrackerStatus,
                   ),
                 ],
               ),
@@ -1285,6 +1303,7 @@ class _WarrantyBadge extends StatelessWidget {
 
   Color _bgColor() {
     switch (status) {
+      case WarrantyStatus.notStarted: return const Color(0xFF9CA3AF);
       case WarrantyStatus.active: return const Color(0xFF4F46E5);
       case WarrantyStatus.expiringSoon: return const Color(0xFFFB923C);
       case WarrantyStatus.expired: return const Color(0xFFEF4444);
@@ -1371,3 +1390,281 @@ class _InsuranceBadge extends StatelessWidget {
   }
 }
 
+class _CustomTrackerBadge extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final CustomTrackerStatus status;
+
+  const _CustomTrackerBadge({
+    required this.emoji,
+    required this.label,
+    required this.status,
+  });
+
+  Color _bgColor() {
+    switch (status) {
+      case CustomTrackerStatus.active: return const Color(0xFFFF6B35);
+      case CustomTrackerStatus.expiringSoon: return const Color(0xFFFBBF24);
+      case CustomTrackerStatus.expired: return const Color(0xFFEF4444);
+      case CustomTrackerStatus.notStarted: return const Color(0xFF9CA3AF);
+      case CustomTrackerStatus.unknown: return const Color(0xFF9CA3AF);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _bgColor();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: c.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: c,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SPACE PICKER – simple two-level dropdowns
+// ═══════════════════════════════════════════════════════════════════
+class _SpacePicker extends StatefulWidget {
+  final int? initialSpaceId;
+  final void Function(int id, String name) onSpaceSelected;
+
+  const _SpacePicker({
+    required this.onSpaceSelected,
+    this.initialSpaceId,
+  });
+
+  @override
+  State<_SpacePicker> createState() => _SpacePickerState();
+}
+
+class _SpacePickerState extends State<_SpacePicker> {
+  List<Space> _parents = [];
+  List<Space> _children = [];
+  Space? _selectedParent;
+  Space? _selectedChild;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadParents();
+  }
+
+  Future<void> _loadParents() async {
+    try {
+      final repo = sl<SpacesRepository>();
+      final parents = await repo.getParentSpaces();
+      Space? initParent;
+      Space? initChild;
+
+      // If there's an initial selection, figure out which parent/child it belongs to
+      if (widget.initialSpaceId != null) {
+        for (final p in parents) {
+          if (p.id == widget.initialSpaceId) {
+            initParent = p;
+            break;
+          }
+        }
+        // If not found among parents, it might be a child – load children for each parent
+        if (initParent == null) {
+          for (final p in parents) {
+            if (p.childrenCount > 0) {
+              try {
+                final children = await repo.getChildrenSpaces(p.id);
+                final match = children.where((c) => c.id == widget.initialSpaceId).firstOrNull;
+                if (match != null) {
+                  initParent = p;
+                  initChild = match;
+                  if (mounted) setState(() => _children = children);
+                  break;
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _parents = parents;
+          _selectedParent = initParent;
+          _selectedChild = initChild;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  Future<void> _onParentChanged(Space? parent) async {
+    if (parent == null) {
+      setState(() {
+        _selectedParent = null;
+        _selectedChild = null;
+        _children = [];
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedParent = parent;
+      _selectedChild = null;
+      _children = [];
+    });
+
+    // Always allow selecting the parent itself
+    widget.onSpaceSelected(parent.id, parent.name);
+
+    // Load children if any
+    if (parent.childrenCount > 0) {
+      try {
+        final repo = sl<SpacesRepository>();
+        final children = await repo.getChildrenSpaces(parent.id);
+        if (mounted) setState(() => _children = children);
+      } catch (_) {}
+    }
+  }
+
+  InputDecoration _dropdownDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+      filled: true,
+      fillColor: AppColors.background,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
+        ),
+      );
+    }
+    if (_error != null) {
+      return Text('Eroare la încărcarea spațiilor',
+          style: TextStyle(color: AppColors.error, fontSize: 13));
+    }
+    if (_parents.isEmpty) {
+      return Text('Nu există spații create.',
+          style: TextStyle(color: AppColors.textHint, fontSize: 13));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Parent dropdown ──
+        DropdownButtonFormField<Space>(
+          value: _selectedParent,
+          isExpanded: true,
+          decoration: _dropdownDecoration('Selectează spațiul'),
+          hint: const Text('Selectează spațiul', style: TextStyle(fontSize: 14, color: AppColors.textHint)),
+          items: [
+            const DropdownMenuItem<Space>(
+              value: null,
+              child: Text('— Niciun spațiu —', style: TextStyle(fontSize: 14, color: AppColors.textHint)),
+            ),
+            ..._parents.map((p) => DropdownMenuItem<Space>(
+              value: p,
+              child: Row(
+                children: [
+                  Text(p.typeEmoji, style: const TextStyle(fontSize: 15)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      p.childrenCount > 0 ? '${p.name}  (${p.childrenCount} sub-spații)' : p.name,
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ],
+          onChanged: _onParentChanged,
+        ),
+
+        // ── Child dropdown (only when parent has children) ──
+        if (_selectedParent != null && _children.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          DropdownButtonFormField<Space>(
+            value: _selectedChild,
+            isExpanded: true,
+            decoration: _dropdownDecoration('Selectează sub-spațiul (opțional)'),
+            hint: const Text('Sub-spațiu (opțional)',
+                style: TextStyle(fontSize: 14, color: AppColors.textHint)),
+            items: [
+              const DropdownMenuItem<Space>(
+                value: null,
+                child: Text('— Tot spațiul —',
+                    style: TextStyle(fontSize: 14, color: AppColors.textHint)),
+              ),
+              ..._children.map((c) => DropdownMenuItem<Space>(
+                value: c,
+                child: Row(
+                  children: [
+                    Text(c.typeEmoji, style: const TextStyle(fontSize: 15)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(c.name,
+                          style: const TextStyle(fontSize: 14),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+              )),
+            ],
+            onChanged: (child) {
+              setState(() => _selectedChild = child);
+              if (child != null) {
+                widget.onSpaceSelected(child.id, child.name);
+              } else if (_selectedParent != null) {
+                widget.onSpaceSelected(_selectedParent!.id, _selectedParent!.name);
+              }
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import 'warranty_form_sheet.dart';
 import 'insurance_form_sheet.dart';
+import 'custom_tracker_form_sheet.dart';
 
 class PostSaveMenuPage extends StatefulWidget {
   final int assetId;
@@ -15,6 +16,7 @@ class PostSaveMenuPage extends StatefulWidget {
 class _PostSaveMenuPageState extends State<PostSaveMenuPage> {
   bool _warrantyAdded = false;
   bool _insuranceAdded = false;
+  bool _customTrackerAdded = false;
 
   void _finalize() {
     context.pop(true);
@@ -52,6 +54,26 @@ class _PostSaveMenuPageState extends State<PostSaveMenuPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Asigurarea a fost adăugată cu succes!'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showCustomTrackerForm() async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => CustomTrackerFormSheet(assetId: widget.assetId),
+    );
+    if (result == true && mounted) {
+      setState(() => _customTrackerAdded = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Custom Tracker a fost adăugat cu succes!'),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -98,7 +120,7 @@ class _PostSaveMenuPageState extends State<PostSaveMenuPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Dorești să adaugi garanție sau asigurare?',
+              'Dorești să adaugi garanție, asigurare sau custom tracker?',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -125,6 +147,17 @@ class _PostSaveMenuPageState extends State<PostSaveMenuPage> {
               color: const Color(0xFF22C55E),
               isCompleted: _insuranceAdded,
               onTap: _showInsuranceForm,
+            ),
+            const SizedBox(height: 16),
+
+            // Adaugă Custom Tracker
+            _buildMenuOption(
+              icon: Icons.track_changes_rounded,
+              title: 'Adaugă Custom Tracker',
+              subtitle: _customTrackerAdded ? 'Tracker adăugat ✓' : 'Nume, descriere, perioadă',
+              color: const Color(0xFFFF6B35),
+              isCompleted: _customTrackerAdded,
+              onTap: _showCustomTrackerForm,
             ),
 
             const Spacer(),
@@ -236,4 +269,3 @@ class _PostSaveMenuPageState extends State<PostSaveMenuPage> {
     );
   }
 }
-

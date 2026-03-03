@@ -2,10 +2,19 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../features/inventory/domain/entities/paged_assets_result.dart';
 import '../models/asset_model.dart';
 
 abstract class InventoryRemoteDataSource {
-  Future<List<AssetModel>> getMyAssets({int page, int pageSize});
+  Future<PagedAssetsResult> getMyAssets({
+    int page,
+    int pageSize,
+    String? name,
+    String? category,
+    double? minValue,
+    double? maxValue,
+    int? spaceId,
+  });
   Future<AssetModel> getAssetById(String id);
   Future<AssetModel> addAsset(Map<String, dynamic> data);
   Future<AssetModel> updateAsset(String id, Map<String, dynamic> data);
@@ -23,6 +32,10 @@ abstract class InventoryRemoteDataSource {
   Future<void> deleteWarrantyDocument(int assetId);
   Future<Uint8List> downloadInsuranceDocument(int assetId);
   Future<void> deleteInsuranceDocument(int assetId);
+  Future<void> createCustomTracker(Map<String, dynamic> data);
+  Future<Map<String, dynamic>?> getCustomTrackerByAsset(int assetId);
+  Future<void> updateCustomTracker(int trackerId, Map<String, dynamic> data);
+  Future<void> deleteCustomTracker(int trackerId);
 }
 
 class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
@@ -31,15 +44,40 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   InventoryRemoteDataSourceImpl({required this.apiClient});
 
   @override
-  Future<List<AssetModel>> getMyAssets({int page = 1, int pageSize = 1}) async {
+  Future<PagedAssetsResult> getMyAssets({
+    int page = 1,
+    int pageSize = 10,
+    String? name,
+    String? category,
+    double? minValue,
+    double? maxValue,
+    int? spaceId,
+  }) async {
+    final params = <String, dynamic>{
+      'page': page,
+      'pageSize': pageSize,
+    };
+    if (name != null && name.isNotEmpty) params['name'] = name;
+    if (category != null && category.isNotEmpty) params['category'] = category;
+    if (minValue != null) params['minValue'] = minValue;
+    if (maxValue != null) params['maxValue'] = maxValue;
+    if (spaceId != null) params['spaceId'] = spaceId;
+
     final response = await apiClient.dio.get(
       '/Assets/my/paged',
-      queryParameters: {'page': page, 'pageSize': pageSize},
+      queryParameters: params,
     );
-    final list = response.data['items'] as List;
-    return list
+    final data = response.data as Map<String, dynamic>;
+    final list = data['items'] as List;
+    final items = list
         .map((json) => AssetModel.fromJson(json as Map<String, dynamic>))
         .toList();
+
+    return PagedAssetsResult(
+      items: items,
+      totalCount: data['totalCount'] as int? ?? items.length,
+      totalValue: (data['totalValue'] as num?)?.toDouble() ?? 0.0,
+    );
   }
 
   @override
@@ -56,7 +94,9 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
 
   @override
   Future<AssetModel> updateAsset(String id, Map<String, dynamic> data) async {
-    final response = await apiClient.dio.patch('/Assets/$id', data: data);
+    await apiClient.dio.patch('/Assets/$id', data: data);
+    // PATCH returns a plain string, not JSON — fetch the updated asset separately
+    final response = await apiClient.dio.get('/Assets/$id');
     return AssetModel.fromJson(response.data as Map<String, dynamic>);
   }
 
@@ -196,5 +236,51 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   @override
   Future<void> deleteInsuranceDocument(int assetId) async {
     await apiClient.dio.delete('/Insurance/by-asset/$assetId/document');
+  }
+
+  @override
+  Future<void> createCustomTracker(Map<String, dynamic> data) async {
+    await apiClient.dio.post('/CustomTracker/create', data: {
+      'assetId': data['assetId'],
+      'name': data['name'],
+      'description': data['description'],
+      'startDate': data['startDate'],
+      'endDate': data['endDate'],
+    });
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getCustomTrackerByAsset(int assetId) async {
+    try {
+      final response = await apiClient.dio.get('/CustomTracker/by-asset/$assetId');
+      if (response.data == null) return null;
+
+      // API might return a single object or a list
+      if (response.data is List) {
+        final list = response.data as List;
+        if (list.isEmpty) return null;
+        return Map<String, dynamic>.from(list.first as Map);
+      }
+
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (e) {
+      print('Error loading custom tracker for asset $assetId: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<void> updateCustomTracker(int trackerId, Map<String, dynamic> data) async {
+    await apiClient.dio.patch('/CustomTracker/$trackerId', data: {
+      if (data.containsKey('name')) 'name': data['name'],
+      if (data.containsKey('description')) 'description': data['description'],
+      if (data.containsKey('startDate')) 'startDate': data['startDate'],
+      if (data.containsKey('endDate')) 'endDate': data['endDate'],
+    });
+  }
+
+  @override
+  Future<void> deleteCustomTracker(int trackerId) async {
+    await apiClient.dio.delete('/CustomTracker/$trackerId');
   }
 }

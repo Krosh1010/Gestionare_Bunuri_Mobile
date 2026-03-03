@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import '../../domain/entities/asset.dart';
+import '../../domain/entities/paged_assets_result.dart';
 import '../../domain/repositories/inventory_repository.dart';
 import '../datasources/inventory_remote_datasource.dart';
 
@@ -10,8 +11,24 @@ class InventoryRepositoryImpl implements InventoryRepository {
   InventoryRepositoryImpl({required this.remoteDataSource});
 
   @override
-  Future<List<Asset>> getAssets({int page = 1, int pageSize = 1}) async {
-    return await remoteDataSource.getMyAssets(page: page, pageSize: pageSize);
+  Future<PagedAssetsResult> getAssets({
+    int page = 1,
+    int pageSize = 10,
+    String? name,
+    String? category,
+    double? minValue,
+    double? maxValue,
+    int? spaceId,
+  }) async {
+    return await remoteDataSource.getMyAssets(
+      page: page,
+      pageSize: pageSize,
+      name: name,
+      category: category,
+      minValue: minValue,
+      maxValue: maxValue,
+      spaceId: spaceId,
+    );
   }
 
   @override
@@ -97,5 +114,25 @@ class InventoryRepositoryImpl implements InventoryRepository {
   @override
   Future<void> deleteInsuranceDocument(int assetId) async {
     await remoteDataSource.deleteInsuranceDocument(assetId);
+  }
+
+  @override
+  Future<void> createCustomTracker(Map<String, dynamic> data) async {
+    await remoteDataSource.createCustomTracker(data);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getCustomTrackerByAsset(int assetId) async {
+    return await remoteDataSource.getCustomTrackerByAsset(assetId);
+  }
+
+  @override
+  Future<void> updateCustomTracker(int trackerId, Map<String, dynamic> data) async {
+    await remoteDataSource.updateCustomTracker(trackerId, data);
+  }
+
+  @override
+  Future<void> deleteCustomTracker(int trackerId) async {
+    await remoteDataSource.deleteCustomTracker(trackerId);
   }
 }

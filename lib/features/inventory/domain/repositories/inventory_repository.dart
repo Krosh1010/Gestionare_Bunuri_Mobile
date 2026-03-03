@@ -1,9 +1,18 @@
 import 'dart:io';
 import 'dart:typed_data';
 import '../entities/asset.dart';
+import '../entities/paged_assets_result.dart';
 
 abstract class InventoryRepository {
-  Future<List<Asset>> getAssets({int page = 1, int pageSize = 1});
+  Future<PagedAssetsResult> getAssets({
+    int page = 1,
+    int pageSize = 10,
+    String? name,
+    String? category,
+    double? minValue,
+    double? maxValue,
+    int? spaceId,
+  });
   Future<Asset> getAssetById(String id);
   Future<Asset> addAsset(Map<String, dynamic> data);
   Future<Asset> updateAsset(String id, Map<String, dynamic> data);
@@ -21,4 +30,8 @@ abstract class InventoryRepository {
   Future<void> deleteWarrantyDocument(int assetId);
   Future<Uint8List> downloadInsuranceDocument(int assetId);
   Future<void> deleteInsuranceDocument(int assetId);
+  Future<void> createCustomTracker(Map<String, dynamic> data);
+  Future<Map<String, dynamic>?> getCustomTrackerByAsset(int assetId);
+  Future<void> updateCustomTracker(int trackerId, Map<String, dynamic> data);
+  Future<void> deleteCustomTracker(int trackerId);
 }

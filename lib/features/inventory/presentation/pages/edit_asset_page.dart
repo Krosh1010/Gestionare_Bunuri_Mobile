@@ -9,6 +9,7 @@ import '../../domain/entities/asset.dart';
 import '../../domain/repositories/inventory_repository.dart';
 import 'warranty_form_sheet.dart';
 import 'insurance_form_sheet.dart';
+import 'custom_tracker_form_sheet.dart';
 
 class EditAssetPage extends StatefulWidget {
   final Asset asset;
@@ -27,6 +28,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
   late AssetCategory _selectedCategory;
   late DateTime _purchaseDate;
   bool _isSaving = false;
+  late Asset _currentAsset;
 
   // Spații – suport multi-nivel
   List<List<_SpaceItem>> _spaceLevels = [];
@@ -37,6 +39,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
   @override
   void initState() {
     super.initState();
+    _currentAsset = widget.asset;
     _nameController = TextEditingController(text: widget.asset.name);
     _descriptionController = TextEditingController(text: widget.asset.description ?? '');
     _valueController = TextEditingController(text: widget.asset.value.toStringAsFixed(0));
@@ -323,6 +326,15 @@ class _EditAssetPageState extends State<EditAssetPage> {
     }
   }
 
+  Future<void> _refreshAsset() async {
+    try {
+      final updated = await sl<InventoryRepository>().getAssetById(widget.asset.id);
+      if (mounted) {
+        setState(() => _currentAsset = updated);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _showWarrantySheet() async {
     final assetId = int.tryParse(widget.asset.id);
     if (assetId == null) return;
@@ -333,6 +345,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
       builder: (_) => WarrantyFormSheet(assetId: assetId),
     );
     if (result == true && mounted) {
+      await _refreshAsset();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Garanția a fost actualizată!'),
@@ -354,9 +367,32 @@ class _EditAssetPageState extends State<EditAssetPage> {
       builder: (_) => InsuranceFormSheet(assetId: assetId),
     );
     if (result == true && mounted) {
+      await _refreshAsset();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Asigurarea a fost actualizată!'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showCustomTrackerSheet() async {
+    final assetId = int.tryParse(widget.asset.id);
+    if (assetId == null) return;
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CustomTrackerFormSheet(assetId: assetId),
+    );
+    if (result == true && mounted) {
+      await _refreshAsset();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Urmărirea personalizată a fost actualizată!'),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -483,8 +519,8 @@ class _EditAssetPageState extends State<EditAssetPage> {
               _buildSpaceSelector(),
               const SizedBox(height: 24),
 
-              // ─── Garanție & Asigurare ───────────────────────
-              const _SectionTitle(title: 'Garanție & Asigurare'),
+              // ─── Garanție, Asigurare & Urmărire ───────────────────────
+              const _SectionTitle(title: 'Garanție, Asigurare & Urmărire'),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -493,7 +529,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
                       icon: Icons.verified_user_rounded,
                       label: 'Editează\nGaranție',
                       color: const Color(0xFF4F46E5),
-                      statusLabel: widget.asset.warrantyStatusLabel,
+                      statusLabel: _currentAsset.warrantyStatusLabel,
                       onTap: _showWarrantySheet,
                     ),
                   ),
@@ -503,8 +539,22 @@ class _EditAssetPageState extends State<EditAssetPage> {
                       icon: Icons.security_rounded,
                       label: 'Editează\nAsigurare',
                       color: const Color(0xFF22C55E),
-                      statusLabel: widget.asset.insuranceStatusLabel,
+                      statusLabel: _currentAsset.insuranceStatusLabel,
                       onTap: _showInsuranceSheet,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildActionCard(
+                      icon: Icons.track_changes_rounded,
+                      label: 'Editează\nUrmărire Personalizată',
+                      color: const Color(0xFFFFA500),
+                      statusLabel: _currentAsset.customTrackerStatusLabel,
+                      onTap: _showCustomTrackerSheet,
                     ),
                   ),
                 ],

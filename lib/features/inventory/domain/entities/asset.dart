@@ -4,11 +4,14 @@ enum AssetStatus { active, inRepair, decommissioned, transferred }
 
 enum AssetCategory { electronics, furniture, vehicles, documents, other }
 
-// warrantyStatus from API: 0=active, 1=expiredSoon, 2=expired, null=unknown
-enum WarrantyStatus { active, expiringSoon, expired, unknown }
+// warrantyStatus from API: 0=notStarted, 1=active, 2=expiringSoon, 3=expired, null=unknown
+enum WarrantyStatus { notStarted, active, expiringSoon, expired, unknown }
 
 // insuranceStatus from API: 0=notStarted, 1=active, 2=expiringSoon, 3=expired, null=unknown
 enum InsuranceStatus { notStarted, active, expiringSoon, expired, unknown }
+
+// customTrackerStatus from API: 0=notStarted, 1=active, 2=expiringSoon, 3=expired, null=unknown
+enum CustomTrackerStatus { notStarted, active, expiringSoon, expired, unknown }
 
 class Asset extends Equatable {
   final String id;
@@ -39,6 +42,11 @@ class Asset extends Equatable {
   final String? insuranceDocumentFileName;
   final int? insuranceDocumentId;
 
+  // Custom Tracker
+  final String? customTrackerName;
+  final CustomTrackerStatus customTrackerStatus;
+  final DateTime? customTrackerEndDate;
+
   const Asset({
     required this.id,
     required this.name,
@@ -63,6 +71,9 @@ class Asset extends Equatable {
     this.insuranceValue,
     this.insuranceDocumentFileName,
     this.insuranceDocumentId,
+    this.customTrackerName,
+    this.customTrackerStatus = CustomTrackerStatus.unknown,
+    this.customTrackerEndDate,
   });
 
   // Convenience getters
@@ -77,6 +88,12 @@ class Asset extends Equatable {
   int? get insuranceDaysLeft {
     if (insuranceEndDate == null) return null;
     final days = insuranceEndDate!.difference(DateTime.now()).inDays;
+    return days > 0 ? days : 0;
+  }
+
+  int? get customTrackerDaysLeft {
+    if (customTrackerEndDate == null) return null;
+    final days = customTrackerEndDate!.difference(DateTime.now()).inDays;
     return days > 0 ? days : 0;
   }
 
@@ -110,6 +127,8 @@ class Asset extends Equatable {
 
   String get warrantyStatusLabel {
     switch (warrantyStatus) {
+      case WarrantyStatus.notStarted:
+        return 'Neîncepută';
       case WarrantyStatus.active:
         return 'Activă';
       case WarrantyStatus.expiringSoon:
@@ -117,7 +136,7 @@ class Asset extends Equatable {
       case WarrantyStatus.expired:
         return 'Expirată';
       case WarrantyStatus.unknown:
-        return 'Necunoscută';
+        return 'Lipsă';
     }
   }
 
@@ -133,6 +152,21 @@ class Asset extends Equatable {
         return 'Expirată';
       case InsuranceStatus.unknown:
         return 'Lipsă';
+    }
+  }
+
+  String get customTrackerStatusLabel {
+    switch (customTrackerStatus) {
+      case CustomTrackerStatus.notStarted:
+        return 'Neînceput';
+      case CustomTrackerStatus.active:
+        return 'Activ';
+      case CustomTrackerStatus.expiringSoon:
+        return 'Expiră degrabă';
+      case CustomTrackerStatus.expired:
+        return 'Expirat';
+      case CustomTrackerStatus.unknown:
+        return 'Tracker lipsă';
     }
   }
 
@@ -161,5 +195,8 @@ class Asset extends Equatable {
         insuranceValue,
         insuranceDocumentFileName,
         insuranceDocumentId,
+        customTrackerName,
+        customTrackerStatus,
+        customTrackerEndDate,
       ];
 }

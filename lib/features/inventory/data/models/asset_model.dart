@@ -25,6 +25,9 @@ class AssetModel extends Asset {
     super.insuranceValue,
     super.insuranceDocumentFileName,
     super.insuranceDocumentId,
+    super.customTrackerName,
+    super.customTrackerStatus,
+    super.customTrackerEndDate,
   });
 
   /// Maps API category string to enum
@@ -44,16 +47,18 @@ class AssetModel extends Asset {
   }
 
   /// Maps API warrantyStatus int to enum
-  /// 0=active, 1=expiringSoon, 2=expired, null=unknown
+  /// 0=notStarted, 1=active, 2=expiringSoon, 3=expired, null=unknown
   static WarrantyStatus _mapWarrantyStatus(dynamic status) {
     if (status == null) return WarrantyStatus.unknown;
     final val = status is int ? status : int.tryParse(status.toString());
     switch (val) {
       case 0:
-        return WarrantyStatus.active;
+        return WarrantyStatus.notStarted;
       case 1:
-        return WarrantyStatus.expiringSoon;
+        return WarrantyStatus.active;
       case 2:
+        return WarrantyStatus.expiringSoon;
+      case 3:
         return WarrantyStatus.expired;
       default:
         return WarrantyStatus.unknown;
@@ -76,6 +81,25 @@ class AssetModel extends Asset {
         return InsuranceStatus.expired;
       default:
         return InsuranceStatus.unknown;
+    }
+  }
+
+  /// Maps API customTrackerStatus int to enum
+  /// 0=notStarted, 1=active, 2=expiringSoon, 3=expired, null=unknown
+  static CustomTrackerStatus _mapCustomTrackerStatus(dynamic status) {
+    if (status == null) return CustomTrackerStatus.unknown;
+    final val = status is int ? status : int.tryParse(status.toString());
+    switch (val) {
+      case 0:
+        return CustomTrackerStatus.notStarted;
+      case 1:
+        return CustomTrackerStatus.active;
+      case 2:
+        return CustomTrackerStatus.expiringSoon;
+      case 3:
+        return CustomTrackerStatus.expired;
+      default:
+        return CustomTrackerStatus.unknown;
     }
   }
 
@@ -110,6 +134,9 @@ class AssetModel extends Asset {
       insuranceValue: (json['insuranceValue'] as num?)?.toDouble(),
       insuranceDocumentFileName: json['insuranceDocumentFileName'] as String?,
       insuranceDocumentId: json['insuranceDocumentId'] as int?,
+      customTrackerName: json['customTrackerName'] as String?,
+      customTrackerStatus: _mapCustomTrackerStatus(json['customTrackerStatus']),
+      customTrackerEndDate: _parseDate(json['customTrackerEndDate']),
     );
   }
 
@@ -131,6 +158,9 @@ class AssetModel extends Asset {
       'insuranceEndDate': insuranceEndDate?.toIso8601String(),
       'insuranceCompany': insuranceCompany,
       'insuranceValue': insuranceValue,
+      'customTrackerName': customTrackerName,
+      'customTrackerStatus': _customTrackerStatusToInt(customTrackerStatus),
+      'customTrackerEndDate': customTrackerEndDate?.toIso8601String(),
     };
   }
 
@@ -151,12 +181,14 @@ class AssetModel extends Asset {
 
   static int? _warrantyStatusToInt(WarrantyStatus status) {
     switch (status) {
-      case WarrantyStatus.active:
+      case WarrantyStatus.notStarted:
         return 0;
-      case WarrantyStatus.expiringSoon:
+      case WarrantyStatus.active:
         return 1;
-      case WarrantyStatus.expired:
+      case WarrantyStatus.expiringSoon:
         return 2;
+      case WarrantyStatus.expired:
+        return 3;
       case WarrantyStatus.unknown:
         return null;
     }
@@ -173,6 +205,21 @@ class AssetModel extends Asset {
       case InsuranceStatus.expired:
         return 3;
       case InsuranceStatus.unknown:
+        return null;
+    }
+  }
+
+  static int? _customTrackerStatusToInt(CustomTrackerStatus status) {
+    switch (status) {
+      case CustomTrackerStatus.notStarted:
+        return 0;
+      case CustomTrackerStatus.active:
+        return 1;
+      case CustomTrackerStatus.expiringSoon:
+        return 2;
+      case CustomTrackerStatus.expired:
+        return 3;
+      case CustomTrackerStatus.unknown:
         return null;
     }
   }

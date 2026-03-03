@@ -1,1028 +1,1125 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_strings.dart';
-import '../../../../core/di/injection_container.dart';
 import '../../domain/entities/asset.dart';
-import '../../domain/repositories/inventory_repository.dart';
-import 'insurance_form_sheet.dart';
-import 'warranty_form_sheet.dart';
+import '../bloc/asset_detail_cubit.dart';
 
-class AssetDetailPage extends StatefulWidget {
-  final Asset asset;
+class AssetDetailPage extends StatelessWidget {
+  final String assetId;
 
-  const AssetDetailPage({super.key, required this.asset});
+  const AssetDetailPage({super.key, required this.assetId});
 
   @override
-  State<AssetDetailPage> createState() => _AssetDetailPageState();
+  Widget build(BuildContext context) {
+    return BlocBuilder<AssetDetailCubit, AssetDetailState>(
+      builder: (context, state) {
+        if (state is AssetDetailLoading) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2.5),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Se încarcă detaliile...',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (state is AssetDetailError) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_rounded, color: AppColors.textPrimary),
+                onPressed: () => context.pop(),
+              ),
+            ),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: const Icon(Icons.error_outline_rounded, size: 40, color: AppColors.error),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Nu s-au putut încărca datele',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      state.message,
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 28),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () =>
+                            context.read<AssetDetailCubit>().loadAssetDetail(assetId),
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Reîncearcă'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (state is AssetDetailLoaded) {
+          return _AssetDetailView(asset: state.asset);
+        }
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
 }
 
-class _AssetDetailPageState extends State<AssetDetailPage> {
-  late Asset _asset;
-  static const _fileChannel = MethodChannel('com.example.gestionare_bunuri_mobile/file_handler');
+// ═══════════════════════════════════════════════════════════════════
+class _AssetDetailView extends StatefulWidget {
+  final Asset asset;
+  const _AssetDetailView({required this.asset});
 
   @override
-  void initState() {
-    super.initState();
-    _asset = widget.asset;
-  }
+  State<_AssetDetailView> createState() => _AssetDetailViewState();
+}
 
-  Future<void> _refreshAsset() async {
-    try {
-      // Folosim getMyAssets (GET /Assets/my) care returnează datele complete cu warranty/insurance
-      final allAssets = await sl<InventoryRepository>().getAssets();
-      final updated = allAssets.where((a) => a.id == _asset.id).firstOrNull;
-      if (updated != null && mounted) {
-        setState(() => _asset = updated);
-      }
-    } catch (_) {}
-  }
+class _AssetDetailViewState extends State<_AssetDetailView> {
+  Asset get asset => widget.asset;
 
   Future<void> _navigateToEdit() async {
-    final result = await context.push<bool>('/inventory/edit', extra: _asset);
+    final result = await context.push('/inventory/edit', extra: asset);
     if (result == true && mounted) {
-      await _refreshAsset();
-    }
-  }
-
-  Future<void> _showWarrantySheet() async {
-    final assetId = int.tryParse(_asset.id);
-    if (assetId == null) return;
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => WarrantyFormSheet(assetId: assetId),
-    );
-    if (mounted) {
-      if (result == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Garanția a fost actualizată!'),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-      await _refreshAsset();
-    }
-  }
-
-  Future<void> _showInsuranceSheet() async {
-    final assetId = int.tryParse(_asset.id);
-    if (assetId == null) return;
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => InsuranceFormSheet(assetId: assetId),
-    );
-    if (mounted) {
-      if (result == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Asigurarea a fost actualizată!'),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-      await _refreshAsset();
-    }
-  }
-
-  IconData _categoryIcon(AssetCategory category) {
-    switch (category) {
-      case AssetCategory.electronics:
-        return Icons.devices_rounded;
-      case AssetCategory.furniture:
-        return Icons.chair_rounded;
-      case AssetCategory.vehicles:
-        return Icons.directions_car_rounded;
-      case AssetCategory.documents:
-        return Icons.description_rounded;
-      case AssetCategory.other:
-        return Icons.category_rounded;
-    }
-  }
-
-  Color _warrantyColor(WarrantyStatus status) {
-    switch (status) {
-      case WarrantyStatus.active:
-        return const Color(0xFF4F46E5);
-      case WarrantyStatus.expiringSoon:
-        return const Color(0xFFFB923C);
-      case WarrantyStatus.expired:
-        return const Color(0xFFEF4444);
-      case WarrantyStatus.unknown:
-        return const Color(0xFF9CA3AF);
-    }
-  }
-
-  Color _insuranceColor(InsuranceStatus status) {
-    switch (status) {
-      case InsuranceStatus.active:
-        return const Color(0xFF22C55E);
-      case InsuranceStatus.expiringSoon:
-        return const Color(0xFFFBBF24);
-      case InsuranceStatus.expired:
-        return const Color(0xFFEF4444);
-      case InsuranceStatus.notStarted:
-        return const Color(0xFF9CA3AF);
-      case InsuranceStatus.unknown:
-        return const Color(0xFF9CA3AF);
-    }
-  }
-
-  Future<void> _downloadWarrantyDocument() async {
-    final assetId = int.tryParse(_asset.id);
-    if (assetId == null) return;
-    try {
-      final bytes = await sl<InventoryRepository>().downloadWarrantyDocument(assetId);
-      final fileName = _asset.warrantyDocumentFileName ?? 'warranty_document';
-      await _saveAndOpenFile(bytes, fileName);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fișierul a fost salvat în Descărcări: $fileName'),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Eroare la descărcare: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _shareWarrantyDocument() async {
-    final assetId = int.tryParse(_asset.id);
-    if (assetId == null) return;
-    try {
-      final bytes = await sl<InventoryRepository>().downloadWarrantyDocument(assetId);
-      final dir = await getApplicationDocumentsDirectory();
-      final fileName = _asset.warrantyDocumentFileName ?? 'warranty_document';
-      final file = File('${dir.path}/$fileName');
-      await file.writeAsBytes(bytes);
-      if (mounted) {
-        await Share.shareXFiles([XFile(file.path)]);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Eroare la partajare: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteWarrantyDocument() async {
-    final assetId = int.tryParse(_asset.id);
-    if (assetId == null) return;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Șterge Documentul'),
-        content: const Text('Ești sigur că vrei să ștergi documentul garanției?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Anulează')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Șterge', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    try {
-      await sl<InventoryRepository>().deleteWarrantyDocument(assetId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Documentul garanției a fost șters!'),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-        await _refreshAsset();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Eroare: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _downloadInsuranceDocument() async {
-    final assetId = int.tryParse(_asset.id);
-    if (assetId == null) return;
-    try {
-      final bytes = await sl<InventoryRepository>().downloadInsuranceDocument(assetId);
-      final fileName = _asset.insuranceDocumentFileName ?? 'insurance_document';
-      await _saveAndOpenFile(bytes, fileName);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fișierul a fost salvat în Descărcări: $fileName'),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Eroare la descărcare: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _shareInsuranceDocument() async {
-    final assetId = int.tryParse(_asset.id);
-    if (assetId == null) return;
-    try {
-      final bytes = await sl<InventoryRepository>().downloadInsuranceDocument(assetId);
-      final dir = await getApplicationDocumentsDirectory();
-      final fileName = _asset.insuranceDocumentFileName ?? 'insurance_document';
-      final file = File('${dir.path}/$fileName');
-      await file.writeAsBytes(bytes);
-      if (mounted) {
-        await Share.shareXFiles([XFile(file.path)]);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Eroare la partajare: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteInsuranceDocument() async {
-    final assetId = int.tryParse(_asset.id);
-    if (assetId == null) return;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Șterge Documentul'),
-        content: const Text('Ești sigur că vrei să ștergi documentul asigurării?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Anulează')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Șterge', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    try {
-      await sl<InventoryRepository>().deleteInsuranceDocument(assetId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Documentul asigurării a fost șters!'),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-        await _refreshAsset();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Eroare: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _saveAndOpenFile(List<int> bytes, String fileName) async {
-    final dir = await getTemporaryDirectory();
-    final filePath = '${dir.path}/$fileName';
-    final file = File(filePath);
-    await file.writeAsBytes(bytes, flush: true);
-
-    final mimeType = _getMimeType(fileName);
-
-    await _fileChannel.invokeMethod('saveAndOpenFile', {
-      'filePath': filePath,
-      'fileName': fileName,
-      'mimeType': mimeType,
-    });
-  }
-
-  String _getMimeType(String fileName) {
-    final ext = fileName.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'pdf':
-        return 'application/pdf';
-      case 'doc':
-        return 'application/msword';
-      case 'docx':
-        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      case 'xls':
-        return 'application/vnd.ms-excel';
-      case 'xlsx':
-        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'png':
-        return 'image/png';
-      case 'txt':
-        return 'text/plain';
-      case 'csv':
-        return 'text/csv';
-      default:
-        return 'application/octet-stream';
+      context.read<AssetDetailCubit>().loadAssetDetail(asset.id);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final formatter = NumberFormat.currency(locale: 'ro_RO', symbol: 'RON', decimalDigits: 0);
-    final dateFormatter = DateFormat('dd MMMM yyyy', 'ro');
-    final asset = _asset;
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // Custom App Bar
-          SliverAppBar(
-            expandedHeight: 180,
-            pinned: true,
-            leading: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                  onPressed: () => context.pop(),
-                ),
-              ),
-            ),
-            actions: [
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        _navigateToEdit();
-                      } else if (value == 'delete') {
-                        _showDeleteDialog(context);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit_rounded, color: AppColors.primary, size: 20),
-                            SizedBox(width: 10),
-                            Text(AppStrings.edit),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_rounded, color: AppColors.error, size: 20),
-                            SizedBox(width: 10),
-                            Text(AppStrings.delete, style: TextStyle(color: AppColors.error)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 40),
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Icon(
-                          _categoryIcon(asset.category),
-                          color: Colors.white,
-                          size: 36,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Text(
-                          asset.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+          _buildSliverAppBar(context),
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                _buildQuickStats(),
+                _buildBasicInfoSection(),
+                _buildWarrantySection(),
+                _buildInsuranceSection(),
+                _buildCustomTrackerSection(),
+                _buildMetadataSection(),
+                // Bottom action row
+                _buildBottomActions(context),
+                const SizedBox(height: 40),
+              ],
             ),
           ),
+        ],
+      ),
+    );
+  }
 
-          // Content
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+  // ─── SLIVER APP BAR ──────────────────────────────────────────
+  Widget _buildSliverAppBar(BuildContext context) {
+    return SliverAppBar(
+      expandedHeight: 220,
+      pinned: true,
+      stretch: true,
+      backgroundColor: AppColors.primary,
+      surfaceTintColor: AppColors.primary,
+      leading: Padding(
+        padding: const EdgeInsets.all(8),
+        child: GestureDetector(
+          onTap: () => context.pop(),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white, size: 18),
+          ),
+        ),
+      ),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+          child: GestureDetector(
+            onTap: _navigateToEdit,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
                 children: [
-                  // Value Card
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: AppColors.cardGradient,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Valoare Estimată',
-                          style: TextStyle(color: Colors.white70, fontSize: 14),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          formatter.format(asset.value),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
+                  Icon(Icons.edit_rounded, color: Colors.white, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'Editează',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 24),
-
-                  // Informații Generale
-                  Text('Informații Generale', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 16),
-                  _DetailCard(
-                    children: [
-                      _DetailRow(
-                        icon: Icons.category_rounded,
-                        label: AppStrings.assetCategory,
-                        value: asset.categoryLabel,
-                      ),
-                      const Divider(height: 24),
-                      _DetailRow(
-                        icon: Icons.location_on_rounded,
-                        label: 'Spațiu',
-                        value: asset.location,
-                      ),
-                      const Divider(height: 24),
-                      _DetailRow(
-                        icon: Icons.shopping_cart_rounded,
-                        label: AppStrings.assetPurchaseDate,
-                        value: dateFormatter.format(asset.purchaseDate),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Garanție
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('🛡️ Garanție', style: Theme.of(context).textTheme.titleLarge),
-                      TextButton.icon(
-                        onPressed: _showWarrantySheet,
-                        icon: const Icon(Icons.edit_rounded, size: 16),
-                        label: const Text('Editează'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF4F46E5),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _DetailCard(
-                    children: [
-                      _StatusRow(
-                        icon: Icons.verified_rounded,
-                        label: 'Status garanție',
-                        value: asset.warrantyStatusLabel,
-                        color: _warrantyColor(asset.warrantyStatus),
-                      ),
-                      if (asset.warrantyStartDate != null) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.calendar_today_rounded,
-                          label: 'Început garanție',
-                          value: dateFormatter.format(asset.warrantyStartDate!),
-                        ),
-                      ],
-                      if (asset.warrantyEndDate != null) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.event_rounded,
-                          label: 'Sfârșit garanție',
-                          value: dateFormatter.format(asset.warrantyEndDate!),
-                        ),
-                      ],
-                      if (asset.warrantyProvider != null && asset.warrantyProvider!.isNotEmpty) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.business_rounded,
-                          label: 'Furnizor garanție',
-                          value: asset.warrantyProvider!,
-                        ),
-                      ],
-                      if (asset.warrantyDaysLeft != null) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.timer_rounded,
-                          label: 'Zile rămase',
-                          value: '${asset.warrantyDaysLeft} zile',
-                        ),
-                      ],
-                      if (asset.warrantyDocumentFileName != null) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.description_rounded,
-                          label: 'Document atașat',
-                          value: asset.warrantyDocumentFileName!,
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _downloadWarrantyDocument,
-                                icon: const Icon(Icons.download_rounded, size: 18),
-                                label: const Text('Descarcă'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFF4F46E5),
-                                  side: const BorderSide(color: Color(0xFF4F46E5)),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _shareWarrantyDocument,
-                                icon: const Icon(Icons.share_rounded, size: 18),
-                                label: const Text('Trimite'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFF4F46E5),
-                                  side: const BorderSide(color: Color(0xFF4F46E5)),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 48,
-                              child: OutlinedButton(
-                                onPressed: _deleteWarrantyDocument,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.error,
-                                  side: const BorderSide(color: AppColors.error),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                                child: const Icon(Icons.delete_outline_rounded, size: 18),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Asigurare
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('📄 Asigurare', style: Theme.of(context).textTheme.titleLarge),
-                      TextButton.icon(
-                        onPressed: _showInsuranceSheet,
-                        icon: const Icon(Icons.edit_rounded, size: 16),
-                        label: const Text('Editează'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF22C55E),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _DetailCard(
-                    children: [
-                      _StatusRow(
-                        icon: Icons.security_rounded,
-                        label: 'Status asigurare',
-                        value: asset.insuranceStatusLabel,
-                        color: _insuranceColor(asset.insuranceStatus),
-                      ),
-                      if (asset.insuranceStartDate != null) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.calendar_today_rounded,
-                          label: 'Început asigurare',
-                          value: dateFormatter.format(asset.insuranceStartDate!),
-                        ),
-                      ],
-                      if (asset.insuranceEndDate != null) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.event_rounded,
-                          label: 'Sfârșit asigurare',
-                          value: dateFormatter.format(asset.insuranceEndDate!),
-                        ),
-                      ],
-                      if (asset.insuranceCompany != null && asset.insuranceCompany!.isNotEmpty) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.business_rounded,
-                          label: 'Companie asigurări',
-                          value: asset.insuranceCompany!,
-                        ),
-                      ],
-                      if (asset.insuranceValue != null) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.attach_money_rounded,
-                          label: 'Valoare asigurare',
-                          value: formatter.format(asset.insuranceValue),
-                        ),
-                      ],
-                      if (asset.insuranceDaysLeft != null) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.timer_rounded,
-                          label: 'Zile rămase',
-                          value: '${asset.insuranceDaysLeft} zile',
-                        ),
-                      ],
-                      if (asset.insuranceDocumentFileName != null) ...[
-                        const Divider(height: 24),
-                        _DetailRow(
-                          icon: Icons.description_rounded,
-                          label: 'Document atașat',
-                          value: asset.insuranceDocumentFileName!,
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _downloadInsuranceDocument,
-                                icon: const Icon(Icons.download_rounded, size: 18),
-                                label: const Text('Descarcă'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFF22C55E),
-                                  side: const BorderSide(color: Color(0xFF22C55E)),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _shareInsuranceDocument,
-                                icon: const Icon(Icons.share_rounded, size: 18),
-                                label: const Text('Trimite'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFF22C55E),
-                                  side: const BorderSide(color: Color(0xFF22C55E)),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 48,
-                              child: OutlinedButton(
-                                onPressed: _deleteInsuranceDocument,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.error,
-                                  side: const BorderSide(color: AppColors.error),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                                child: const Icon(Icons.delete_outline_rounded, size: 18),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Descriere
-                  if (asset.description != null && asset.description!.isNotEmpty) ...[
-                    Text(AppStrings.assetDescription, style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
-                      ),
-                      child: Text(
-                        asset.description!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              height: 1.6,
-                              color: AppColors.textSecondary,
-                            ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-
-                  // Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _navigateToEdit,
-                          icon: const Icon(Icons.edit_rounded),
-                          label: const Text(AppStrings.edit),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _showDeleteDialog(context),
-                          icon: const Icon(Icons.delete_rounded, color: Colors.white),
-                          label: const Text('Șterge', style: TextStyle(color: Colors.white)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.error,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
                 ],
               ),
             ),
           ),
+        ),
+      ],
+      flexibleSpace: FlexibleSpaceBar(
+        stretchModes: const [StretchMode.zoomBackground],
+        background: Container(
+          decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+          child: SafeArea(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 36),
+                _buildCategoryIcon(),
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    asset.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      height: 1.2,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        asset.categoryLabel,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on_rounded,
+                              color: Colors.white, size: 13),
+                          const SizedBox(width: 4),
+                          Text(
+                            asset.location,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryIcon() {
+    IconData icon;
+    List<Color> colors;
+    switch (asset.category) {
+      case AssetCategory.electronics:
+        icon = Icons.devices_rounded;
+        colors = [const Color(0xFF818CF8), const Color(0xFF6366F1)];
+        break;
+      case AssetCategory.furniture:
+        icon = Icons.chair_rounded;
+        colors = [const Color(0xFF34D399), const Color(0xFF10B981)];
+        break;
+      case AssetCategory.vehicles:
+        icon = Icons.directions_car_rounded;
+        colors = [const Color(0xFFFBBF24), const Color(0xFFF59E0B)];
+        break;
+      case AssetCategory.documents:
+        icon = Icons.description_rounded;
+        colors = [const Color(0xFF60A5FA), const Color(0xFF3B82F6)];
+        break;
+      case AssetCategory.other:
+        icon = Icons.category_rounded;
+        colors = [const Color(0xFFC084FC), const Color(0xFFA855F7)];
+        break;
+    }
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+            colors: [colors[0].withValues(alpha: 0.35), colors[1].withValues(alpha: 0.25)]),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
+      ),
+      child: Icon(icon, size: 30, color: Colors.white),
+    );
+  }
+
+  // ─── QUICK STATS ─────────────────────────────────────────────
+  Widget _buildQuickStats() {
+    final formatted = NumberFormat('#,##0', 'ro_RO').format(asset.value);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _StatItem(
+                icon: Icons.payments_rounded,
+                iconColor: const Color(0xFF10B981),
+                label: 'Valoare',
+                value: '$formatted RON',
+              ),
+            ),
+            Container(width: 1, height: 40, color: AppColors.divider),
+            Expanded(
+              child: _StatItem(
+                icon: Icons.calendar_month_rounded,
+                iconColor: const Color(0xFF6366F1),
+                label: 'Achiziționat',
+                value: DateFormat('dd MMM yyyy', 'ro').format(asset.purchaseDate),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── BASIC INFO ──────────────────────────────────────────────
+  Widget _buildBasicInfoSection() {
+    final hasDescription = asset.description != null && asset.description!.isNotEmpty;
+    if (!hasDescription) return const SizedBox.shrink();
+
+    return _SectionCard(
+      title: 'Descriere',
+      icon: Icons.notes_rounded,
+      iconColor: const Color(0xFF6366F1),
+      children: [
+        Text(
+          asset.description!,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+            height: 1.6,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── WARRANTY ────────────────────────────────────────────────
+  Widget _buildWarrantySection() {
+    final hasWarranty = asset.warrantyStatus != WarrantyStatus.unknown &&
+        asset.warrantyStatus != WarrantyStatus.notStarted;
+    final statusColor = _getWarrantyStatusColor(asset.warrantyStatus);
+
+    return _SectionCard(
+      title: 'Garanție',
+      icon: Icons.verified_user_rounded,
+      iconColor: const Color(0xFF3B82F6),
+      statusBadge: _StatusPill(
+        label: asset.warrantyStatusLabel,
+        color: statusColor,
+        showDot: hasWarranty,
+      ),
+      children: hasWarranty
+          ? [
+              if (asset.warrantyProvider != null)
+                _InfoTile(
+                  icon: Icons.business_rounded,
+                  label: 'Furnizor',
+                  value: asset.warrantyProvider!,
+                ),
+              if (asset.warrantyStartDate != null && asset.warrantyEndDate != null)
+                _DateRangeRow(
+                  start: asset.warrantyStartDate!,
+                  end: asset.warrantyEndDate!,
+                  daysLeft: asset.warrantyDaysLeft,
+                  statusColor: statusColor,
+                ),
+            ]
+          : [
+              _EmptyHint(
+                  message: 'Nicio garanție înregistrată',
+                  icon: Icons.verified_user_rounded),
+            ],
+    );
+  }
+
+  // ─── INSURANCE ───────────────────────────────────────────────
+  Widget _buildInsuranceSection() {
+    final hasInsurance = asset.insuranceStatus != InsuranceStatus.unknown;
+    final statusColor = _getInsuranceStatusColor(asset.insuranceStatus);
+
+    return _SectionCard(
+      title: 'Asigurare',
+      icon: Icons.shield_rounded,
+      iconColor: const Color(0xFF10B981),
+      statusBadge: _StatusPill(
+        label: asset.insuranceStatusLabel,
+        color: statusColor,
+        showDot: hasInsurance,
+      ),
+      children: hasInsurance
+          ? [
+              if (asset.insuranceCompany != null)
+                _InfoTile(
+                  icon: Icons.apartment_rounded,
+                  label: 'Companie',
+                  value: asset.insuranceCompany!,
+                ),
+              if (asset.insuranceValue != null)
+                _InfoTile(
+                  icon: Icons.savings_rounded,
+                  label: 'Valoare Asigurată',
+                  value:
+                      '${NumberFormat('#,##0', 'ro_RO').format(asset.insuranceValue)} RON',
+                  highlight: true,
+                ),
+              if (asset.insuranceStartDate != null && asset.insuranceEndDate != null)
+                _DateRangeRow(
+                  start: asset.insuranceStartDate!,
+                  end: asset.insuranceEndDate!,
+                  daysLeft: asset.insuranceDaysLeft,
+                  statusColor: statusColor,
+                ),
+            ]
+          : [
+              _EmptyHint(
+                  message: 'Nicio asigurare înregistrată',
+                  icon: Icons.shield_rounded),
+            ],
+    );
+  }
+
+  // ─── CUSTOM TRACKER ──────────────────────────────────────────
+  Widget _buildCustomTrackerSection() {
+    final hasTracker = asset.customTrackerStatus != CustomTrackerStatus.unknown;
+    final statusColor = _getTrackerStatusColor(asset.customTrackerStatus);
+
+    return _SectionCard(
+      title: asset.customTrackerName ?? 'Tracker Personalizat',
+      icon: Icons.track_changes_rounded,
+      iconColor: const Color(0xFFF59E0B),
+      statusBadge: _StatusPill(
+        label: asset.customTrackerStatusLabel,
+        color: statusColor,
+        showDot: hasTracker,
+      ),
+      children: hasTracker
+          ? [
+              if (asset.customTrackerEndDate != null)
+                _InfoTile(
+                  icon: Icons.event_busy_rounded,
+                  label: 'Data Expirare',
+                  value: DateFormat('dd MMMM yyyy', 'ro').format(asset.customTrackerEndDate!),
+                ),
+              if (asset.customTrackerDaysLeft != null)
+                _DaysLeftBar(
+                  daysLeft: asset.customTrackerDaysLeft!,
+                  color: statusColor,
+                ),
+            ]
+          : [
+              _EmptyHint(
+                message: 'Niciun tracker înregistrat',
+                icon: Icons.track_changes_rounded,
+              ),
+            ],
+    );
+  }
+
+  // ─── METADATA ────────────────────────────────────────────────
+  Widget _buildMetadataSection() {
+    if (asset.createdAt == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.access_time_rounded, size: 13, color: AppColors.textHint),
+          const SizedBox(width: 5),
+          Text(
+            'Adăugat în sistem: ${DateFormat('dd MMM yyyy', 'ro').format(asset.createdAt!)}',
+            style: const TextStyle(
+              color: AppColors.textHint,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  void _showDeleteDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(AppStrings.deleteAsset),
-        content: const Text(AppStrings.deleteConfirmation),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text(AppStrings.cancel),
+  // ─── BOTTOM ACTIONS ──────────────────────────────────────────
+  Widget _buildBottomActions(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Row(
+        children: [
+          // Delete button
+          Expanded(
+            child: _ActionButton(
+              label: 'Șterge',
+              icon: Icons.delete_outline_rounded,
+              color: AppColors.error,
+              outlined: true,
+              onTap: () => _confirmDelete(context),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              try {
-                await sl<InventoryRepository>().deleteAsset(_asset.id);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Bunul a fost șters cu succes!'),
-                      backgroundColor: AppColors.success,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  );
-                  context.pop();
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Eroare la ștergere: $e'),
-                      backgroundColor: AppColors.error,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text(AppStrings.delete, style: TextStyle(color: Colors.white)),
+          const SizedBox(width: 12),
+          // Edit button
+          Expanded(
+            flex: 2,
+            child: _ActionButton(
+              label: 'Editează Bunul',
+              icon: Icons.edit_rounded,
+              color: AppColors.primary,
+              outlined: false,
+              onTap: _navigateToEdit,
+            ),
           ),
         ],
       ),
     );
+  }
+
+  void _confirmDelete(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: AppColors.surface,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.delete_outline_rounded,
+                  color: AppColors.error, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Text('Șterge bunul',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: RichText(
+          text: TextSpan(
+            style: const TextStyle(
+                color: AppColors.textSecondary, fontSize: 14, height: 1.5),
+            children: [
+              const TextSpan(text: 'Ești sigur că vrei să ștergi '),
+              TextSpan(
+                text: '"${asset.name}"',
+                style: const TextStyle(
+                    color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+              ),
+              const TextSpan(text: '? Această acțiune nu poate fi anulată.'),
+            ],
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    side: BorderSide(
+                        color: AppColors.divider.withValues(alpha: 0.6)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Anulează'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(dialogCtx);
+                    _deleteAsset(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Șterge',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteAsset(BuildContext context) async {
+    // Show loading overlay
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      ),
+    );
+
+    final cubit = context.read<AssetDetailCubit>();
+    final success = await cubit.deleteAsset(asset.id);
+
+    if (!context.mounted) return;
+    Navigator.pop(context); // close loading
+
+    if (success) {
+      context.pop(); // go back to inventory list
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Expanded(child: Text('Nu s-a putut șterge bunul. Încearcă din nou.')),
+            ],
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    }
+  }
+
+  // ─── COLOR HELPERS ───────────────────────────────────────────
+  Color _getWarrantyStatusColor(WarrantyStatus s) {
+    switch (s) {
+      case WarrantyStatus.notStarted: return AppColors.textHint;
+      case WarrantyStatus.active: return AppColors.success;
+      case WarrantyStatus.expiringSoon: return AppColors.warning;
+      case WarrantyStatus.expired: return AppColors.error;
+      case WarrantyStatus.unknown: return AppColors.textHint;
+    }
+  }
+
+  Color _getInsuranceStatusColor(InsuranceStatus s) {
+    switch (s) {
+      case InsuranceStatus.active: return AppColors.success;
+      case InsuranceStatus.expiringSoon: return AppColors.warning;
+      case InsuranceStatus.expired: return AppColors.error;
+      case InsuranceStatus.notStarted: return AppColors.textHint;
+      case InsuranceStatus.unknown: return AppColors.textHint;
+    }
+  }
+
+  Color _getTrackerStatusColor(CustomTrackerStatus s) {
+    switch (s) {
+      case CustomTrackerStatus.active: return AppColors.success;
+      case CustomTrackerStatus.expiringSoon: return AppColors.warning;
+      case CustomTrackerStatus.expired: return AppColors.error;
+      case CustomTrackerStatus.notStarted: return AppColors.textHint;
+      case CustomTrackerStatus.unknown: return AppColors.textHint;
+    }
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// DETAIL WIDGETS
+// REUSABLE WIDGETS
 // ═══════════════════════════════════════════════════════════════════
 
-class _DetailCard extends StatelessWidget {
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color iconColor;
+  final Widget? statusBadge;
   final List<Widget> children;
-  const _DetailCard({required this.children});
+
+  const _SectionCard({
+    required this.title,
+    required this.icon,
+    required this.iconColor,
+    this.statusBadge,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                if (statusBadge != null) statusBadge!,
+              ],
+            ),
+          ),
+          Divider(height: 1, color: AppColors.divider.withValues(alpha: 0.6)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final String value;
+
+  const _StatItem({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: const TextStyle(
+              color: AppColors.textHint, fontSize: 11, fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w700),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+class _InfoTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool highlight;
+
+  const _InfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.textHint),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                      color: AppColors.textHint,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.3),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: highlight ? AppColors.primary : AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DateRangeRow extends StatelessWidget {
+  final DateTime start;
+  final DateTime end;
+  final int? daysLeft;
+  final Color statusColor;
+
+  const _DateRangeRow({
+    required this.start,
+    required this.end,
+    required this.daysLeft,
+    required this.statusColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('dd MMM yyyy', 'ro');
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
       ),
-      child: Column(children: children),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  const _DetailRow({required this.icon, required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: AppColors.primary, size: 20),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        children: [
+          Row(
             children: [
-              Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textHint, fontSize: 12)),
-              const SizedBox(height: 2),
-              Text(value, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatusRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-  const _StatusRow({required this.icon, required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textHint, fontSize: 12)),
-              const SizedBox(height: 4),
+              _DateCol(label: 'Început', date: fmt.format(start)),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: color.withValues(alpha: 0.3)),
-                ),
-                child: Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                child: const Icon(Icons.arrow_forward_rounded,
+                    size: 16, color: AppColors.textHint),
               ),
+              _DateCol(label: 'Expirare', date: fmt.format(end), isEnd: true),
             ],
           ),
+          if (daysLeft != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.hourglass_bottom_rounded, size: 14, color: statusColor),
+                const SizedBox(width: 6),
+                Text(
+                  daysLeft! > 0 ? '$daysLeft zile rămase' : 'Expirat',
+                  style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DateCol extends StatelessWidget {
+  final String label;
+  final String date;
+  final bool isEnd;
+
+  const _DateCol({required this.label, required this.date, this.isEnd = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment:
+            isEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  color: AppColors.textHint,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 3),
+          Text(date,
+              style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+class _DaysLeftBar extends StatelessWidget {
+  final int daysLeft;
+  final Color color;
+
+  const _DaysLeftBar({required this.daysLeft, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.hourglass_bottom_rounded, size: 16, color: color),
+          const SizedBox(width: 8),
+          Text(
+            daysLeft > 0 ? '$daysLeft zile rămase' : 'Expirat',
+            style: TextStyle(
+                color: color, fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool showDot;
+
+  const _StatusPill(
+      {required this.label, required this.color, this.showDot = true});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showDot) ...[
+            Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+            const SizedBox(width: 5),
+          ],
+          Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyHint extends StatelessWidget {
+  final String message;
+  final IconData icon;
+
+  const _EmptyHint({required this.message, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 16, color: AppColors.textHint),
+        const SizedBox(width: 8),
+        Text(
+          message,
+          style: const TextStyle(
+              color: AppColors.textHint,
+              fontSize: 13,
+              fontStyle: FontStyle.italic),
         ),
       ],
     );
   }
 }
 
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool outlined;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.outlined,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (outlined) {
+      return OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18, color: color),
+        label: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          side: BorderSide(color: color.withValues(alpha: 0.5), width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          backgroundColor: color.withValues(alpha: 0.04),
+        ),
+      );
+    }
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 18, color: Colors.white),
+      label: Text(label,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        elevation: 0,
+        shadowColor: color.withValues(alpha: 0.4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+}
