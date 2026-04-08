@@ -53,12 +53,18 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final router = GoRouter.of(context);
+
     return BlocProvider(
       create: (_) => AuthBloc(),
       child: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
-          if (state is AuthAuthenticated) {
-            context.go('/dashboard');
+          if (state is RegisterPendingVerification) {
+            router.go('/verify-email', extra: {
+              'email': state.email,
+              'fullName': state.fullName,
+              'password': state.password,
+            });
           } else if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -295,7 +301,7 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                                       ),
                                 ),
                                 GestureDetector(
-                                  onTap: () => context.go('/login'),
+                                  onTap: () => router.go('/login'),
                                   child: Text(
                                     AppStrings.signIn,
                                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -321,4 +327,3 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
     );
   }
 }
-

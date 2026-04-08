@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/asset.dart';
@@ -61,5 +62,13 @@ class AssetDetailCubit extends Cubit<AssetDetailState> {
       emit(AssetDetailError('Nu s-a putut șterge bunul: ${e.toString()}'));
       return false;
     }
+  }
+
+  Future<Uint8List> downloadWarrantyDocument(int assetId) async {
+    return await repository.downloadWarrantyDocument(assetId);
+  }
+
+  Future<Uint8List> downloadInsuranceDocument(int assetId) async {
+    return await repository.downloadInsuranceDocument(assetId);
   }
 }

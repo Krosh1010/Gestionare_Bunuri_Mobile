@@ -24,6 +24,16 @@ class Asset extends Equatable {
   final DateTime? createdAt;
   final int? spaceId;
   final String? spaceName;
+  final bool isLoaned;
+
+  // Loan
+  final int? loanId;
+  final String? loanedToName;
+  final String? loanCondition;
+  final String? loanNotes;
+  final DateTime? loanedAt;
+  final DateTime? loanReturnedAt;
+  final String? loanConditionOnReturn;
 
   // Warranty
   final WarrantyStatus warrantyStatus;
@@ -58,6 +68,14 @@ class Asset extends Equatable {
     this.createdAt,
     this.spaceId,
     this.spaceName,
+    this.isLoaned = false,
+    this.loanId,
+    this.loanedToName,
+    this.loanCondition,
+    this.loanNotes,
+    this.loanedAt,
+    this.loanReturnedAt,
+    this.loanConditionOnReturn,
     this.warrantyStatus = WarrantyStatus.unknown,
     this.warrantyStartDate,
     this.warrantyEndDate,
@@ -182,6 +200,14 @@ class Asset extends Equatable {
         createdAt,
         spaceId,
         spaceName,
+        isLoaned,
+        loanId,
+        loanedToName,
+        loanCondition,
+        loanNotes,
+        loanedAt,
+        loanReturnedAt,
+        loanConditionOnReturn,
         warrantyStatus,
         warrantyStartDate,
         warrantyEndDate,

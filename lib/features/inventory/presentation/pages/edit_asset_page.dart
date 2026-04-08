@@ -10,6 +10,7 @@ import '../../domain/repositories/inventory_repository.dart';
 import 'warranty_form_sheet.dart';
 import 'insurance_form_sheet.dart';
 import 'custom_tracker_form_sheet.dart';
+import 'loan_form_sheet.dart';
 
 class EditAssetPage extends StatefulWidget {
   final Asset asset;
@@ -401,6 +402,28 @@ class _EditAssetPageState extends State<EditAssetPage> {
     }
   }
 
+  Future<void> _showLoanSheet() async {
+    final assetId = int.tryParse(widget.asset.id);
+    if (assetId == null) return;
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => LoanFormSheet(assetId: assetId),
+    );
+    if (result == true && mounted) {
+      await _refreshAsset();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Împrumutul a fost actualizat!'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateFormatter = DateFormat('dd.MM.yyyy');
@@ -555,6 +578,20 @@ class _EditAssetPageState extends State<EditAssetPage> {
                       color: const Color(0xFFFFA500),
                       statusLabel: _currentAsset.customTrackerStatusLabel,
                       onTap: _showCustomTrackerSheet,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _buildActionCard(
+                      icon: Icons.swap_horiz_rounded,
+                      label: _currentAsset.isLoaned
+                          ? 'Gestionează\nÎmprumut'
+                          : 'Adaugă\nÎmprumut',
+                      color: AppColors.error,
+                      statusLabel: _currentAsset.isLoaned
+                          ? 'Activ → ${_currentAsset.loanedToName ?? ''}'
+                          : 'Niciun împrumut',
+                      onTap: _showLoanSheet,
                     ),
                   ),
                 ],

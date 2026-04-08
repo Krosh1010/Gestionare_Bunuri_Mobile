@@ -2,7 +2,7 @@ import 'package:equatable/equatable.dart';
 
 class AppNotification extends Equatable {
   final String id;
-  final int type; // 0 = warranty, 1 = insurance
+  final int type; // 0 = warranty, 1 = insurance, 2 = tracker
   final String message;
   final bool isRead;
 
@@ -16,4 +16,3 @@ class AppNotification extends Equatable {
   @override
   List<Object?> get props => [id, type, message, isRead];
 }
-

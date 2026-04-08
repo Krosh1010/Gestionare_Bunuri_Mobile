@@ -36,6 +36,14 @@ abstract class InventoryRemoteDataSource {
   Future<Map<String, dynamic>?> getCustomTrackerByAsset(int assetId);
   Future<void> updateCustomTracker(int trackerId, Map<String, dynamic> data);
   Future<void> deleteCustomTracker(int trackerId);
+
+  // Loan
+  Future<Map<String, dynamic>?> getActiveLoanByAsset(int assetId);
+  Future<List<Map<String, dynamic>>> getLoanHistory(int assetId);
+  Future<void> createLoan(Map<String, dynamic> data);
+  Future<void> updateLoan(int loanId, Map<String, dynamic> data);
+  Future<void> returnLoan(int loanId, Map<String, dynamic> data);
+  Future<void> deleteLoan(int loanId);
 }
 
 class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
@@ -282,5 +290,45 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   @override
   Future<void> deleteCustomTracker(int trackerId) async {
     await apiClient.dio.delete('/CustomTracker/$trackerId');
+  }
+
+  // ── Loan ──────────────────────────────────────────────────────
+
+  @override
+  Future<Map<String, dynamic>?> getActiveLoanByAsset(int assetId) async {
+    try {
+      final response = await apiClient.dio.get('/loan/active/by-asset/$assetId');
+      if (response.data == null) return null;
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getLoanHistory(int assetId) async {
+    final response = await apiClient.dio.get('/loan/history/by-asset/$assetId');
+    final list = response.data as List;
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  @override
+  Future<void> createLoan(Map<String, dynamic> data) async {
+    await apiClient.dio.post('/loan/create', data: data);
+  }
+
+  @override
+  Future<void> updateLoan(int loanId, Map<String, dynamic> data) async {
+    await apiClient.dio.patch('/loan/$loanId', data: data);
+  }
+
+  @override
+  Future<void> returnLoan(int loanId, Map<String, dynamic> data) async {
+    await apiClient.dio.patch('/loan/$loanId/return', data: data);
+  }
+
+  @override
+  Future<void> deleteLoan(int loanId) async {
+    await apiClient.dio.delete('/loan/$loanId');
   }
 }

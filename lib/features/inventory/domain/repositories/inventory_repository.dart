@@ -34,4 +34,12 @@ abstract class InventoryRepository {
   Future<Map<String, dynamic>?> getCustomTrackerByAsset(int assetId);
   Future<void> updateCustomTracker(int trackerId, Map<String, dynamic> data);
   Future<void> deleteCustomTracker(int trackerId);
+
+  // Loan
+  Future<Map<String, dynamic>?> getActiveLoanByAsset(int assetId);
+  Future<List<Map<String, dynamic>>> getLoanHistory(int assetId);
+  Future<void> createLoan(Map<String, dynamic> data);
+  Future<void> updateLoan(int loanId, Map<String, dynamic> data);
+  Future<void> returnLoan(int loanId, Map<String, dynamic> data);
+  Future<void> deleteLoan(int loanId);
 }

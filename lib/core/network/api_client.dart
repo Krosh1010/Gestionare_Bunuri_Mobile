@@ -7,9 +7,9 @@ class ApiClient {
   ApiClient({String? baseUrl}) {
     _dio = Dio(
       BaseOptions(
-        baseUrl: baseUrl ?? 'http://192.168.1.6:5288/api', // Înlocuiește cu IP-ul local al PC-ului tău!
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
+        baseUrl: baseUrl ?? 'http://192.168.1.5:5288/api',
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -20,9 +20,22 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          // Skip adding auth token for login/register endpoints
+
           final path = options.path.toLowerCase();
-          if (!path.contains('/auth/login') && !path.contains('/auth/register')) {
+          final uri = options.uri.toString().toLowerCase();
+          if (path.contains('/auth/login') ||
+              path.contains('/auth/register') ||
+              path.contains('/auth/forgot-password') ||
+              path.contains('/auth/reset-password') ||
+              path.contains('/auth/verify-email') ||
+              uri.contains('/auth/login') ||
+              uri.contains('/auth/register') ||
+              uri.contains('/auth/forgot-password') ||
+              uri.contains('/auth/reset-password') ||
+              uri.contains('/auth/verify-email')) {
+
+            options.headers.remove('Authorization');
+          } else {
             final prefs = await SharedPreferences.getInstance();
             final token = prefs.getString('jwt_token');
             if (token != null && token.isNotEmpty) {
@@ -36,7 +49,7 @@ class ApiClient {
         },
       ),
     );
-    // Adaug LogInterceptor pentru logare completă
+
     _dio.interceptors.add(LogInterceptor(
       request: true,
       requestBody: true,
@@ -48,12 +61,4 @@ class ApiClient {
   }
 
   Dio get dio => _dio;
-
-  void setAuthToken(String token) {
-    _dio.options.headers['Authorization'] = 'Bearer $token';
-  }
-
-  void clearAuthToken() {
-    _dio.options.headers.remove('Authorization');
-  }
 }

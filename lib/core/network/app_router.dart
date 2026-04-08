@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/auth/presentation/pages/forgot_password_page.dart';
+import '../../features/auth/presentation/pages/reset_password_page.dart';
+import '../../features/auth/presentation/pages/verify_email_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/dashboard/presentation/providers/dashboard_provider.dart';
 import '../../features/inventory/presentation/pages/inventory_page.dart';
@@ -36,6 +39,28 @@ class AppRouter {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterPage(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordPage(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) {
+          final email = state.extra as String? ?? '';
+          return ResetPasswordPage(prefillEmail: email);
+        },
+      ),
+      GoRoute(
+        path: '/verify-email',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return VerifyEmailPage(
+            prefillEmail: extra['email'] as String? ?? '',
+            fullName: extra['fullName'] as String? ?? '',
+            password: extra['password'] as String? ?? '',
+          );
+        },
       ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,

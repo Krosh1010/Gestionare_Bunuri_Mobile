@@ -48,12 +48,33 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    // Capturăm router-ul din contextul extern (înainte de BlocProvider)
+    // astfel încât navigarea să funcționeze întotdeauna
+    final router = GoRouter.of(context);
+
     return BlocProvider(
       create: (_) => AuthBloc(),
       child: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthAuthenticated) {
-            context.go('/dashboard');
+            router.go('/dashboard');
+          } else if (state is LoginPendingVerification) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'Contul tău nu este verificat. Ți-am trimis un cod nou pe email.',
+                ),
+                backgroundColor: Colors.orange,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                duration: const Duration(seconds: 4),
+              ),
+            );
+            router.go('/verify-email', extra: {
+              'email': state.email,
+              'fullName': '',
+              'password': state.password,
+            });
           } else if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -205,7 +226,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                     Align(
                                       alignment: Alignment.centerRight,
                                       child: TextButton(
-                                        onPressed: () {},
+                                        onPressed: () => router.go('/forgot-password'),
                                         child: Text(
                                           AppStrings.forgotPassword,
                                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -267,7 +288,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                       ),
                                 ),
                                 GestureDetector(
-                                  onTap: () => context.go('/register'),
+                                  onTap: () => router.go('/register'),
                                   child: Text(
                                     AppStrings.signUp,
                                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(

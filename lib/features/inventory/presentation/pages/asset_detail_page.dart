@@ -1,10 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/asset.dart';
 import '../bloc/asset_detail_cubit.dart';
+import 'loan_history_sheet.dart';
 
 class AssetDetailPage extends StatelessWidget {
   final String assetId;
@@ -129,12 +133,110 @@ class _AssetDetailView extends StatefulWidget {
 }
 
 class _AssetDetailViewState extends State<_AssetDetailView> {
+  static const _fileChannel = MethodChannel('com.example.gestionare_bunuri_mobile/file_handler');
+
   Asset get asset => widget.asset;
 
   Future<void> _navigateToEdit() async {
     final result = await context.push('/inventory/edit', extra: asset);
     if (result == true && mounted) {
       context.read<AssetDetailCubit>().loadAssetDetail(asset.id);
+    }
+  }
+
+  String _getMimeType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf': return 'application/pdf';
+      case 'doc': return 'application/msword';
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls': return 'application/vnd.ms-excel';
+      case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'png': return 'image/png';
+      case 'txt': return 'text/plain';
+      default: return 'application/octet-stream';
+    }
+  }
+
+  Future<void> _downloadAndOpenDocument({
+    required String type, // 'warranty' or 'insurance'
+    required int documentId,
+    required String fileName,
+  }) async {
+    final scaffoldMsg = ScaffoldMessenger.of(context);
+    final cubit = context.read<AssetDetailCubit>();
+    final assetIdInt = int.tryParse(asset.id);
+    if (assetIdInt == null) return;
+
+    scaffoldMsg.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text('Se descarcă $fileName...')),
+          ],
+        ),
+        backgroundColor: AppColors.primary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 10),
+      ),
+    );
+
+    try {
+      final bytes = type == 'warranty'
+          ? await cubit.downloadWarrantyDocument(assetIdInt)
+          : await cubit.downloadInsuranceDocument(assetIdInt);
+
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/$fileName';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes, flush: true);
+
+      final mimeType = _getMimeType(fileName);
+
+      await _fileChannel.invokeMethod('saveAndOpenFile', {
+        'filePath': filePath,
+        'fileName': fileName,
+        'mimeType': mimeType,
+      });
+
+      scaffoldMsg.hideCurrentSnackBar();
+      if (!mounted) return;
+      scaffoldMsg.showSnackBar(
+        SnackBar(
+          content: Text('Fișierul a fost salvat în Descărcări: $fileName'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    } catch (e) {
+      scaffoldMsg.hideCurrentSnackBar();
+      if (!mounted) return;
+      scaffoldMsg.showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text('Eroare la descărcare: $e')),
+            ],
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
     }
   }
 
@@ -149,6 +251,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
             child: Column(
               children: [
                 _buildQuickStats(),
+                _buildLoanSection(),
                 _buildBasicInfoSection(),
                 _buildWarrantySection(),
                 _buildInsuranceSection(),
@@ -280,6 +383,31 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
                         ],
                       ),
                     ),
+                    if (asset.isLoaned) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.lock_clock_rounded, color: Colors.white, size: 13),
+                            SizedBox(width: 4),
+                            Text(
+                              'Împrumutat',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -370,6 +498,267 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
+  // ─── LOAN SECTION ────────────────────────────────────────────
+  Widget _buildLoanSection() {
+    final assetIdInt = int.tryParse(asset.id);
+    final isLoaned = asset.isLoaned;
+    final isReturned = asset.loanReturnedAt != null;
+    final dateFmt = DateFormat('dd MMM yyyy', 'ro');
+
+    final sectionColor = isLoaned
+        ? (isReturned ? AppColors.success : AppColors.error)
+        : AppColors.primary;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: sectionColor.withValues(alpha: 0.35),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: sectionColor.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ──
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+            decoration: BoxDecoration(
+              color: sectionColor.withValues(alpha: 0.07),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: sectionColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    isLoaned
+                        ? (isReturned
+                            ? Icons.assignment_return_rounded
+                            : Icons.swap_horiz_rounded)
+                        : Icons.swap_horiz_rounded,
+                    color: sectionColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Împrumut',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                // Status pill
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: sectionColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: sectionColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: sectionColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        isLoaned
+                            ? (isReturned ? 'Returnat' : 'Activ')
+                            : 'Niciun împrumut',
+                        style: TextStyle(
+                          color: sectionColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: AppColors.divider.withValues(alpha: 0.6)),
+          // ── Body ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!isLoaned)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            size: 15, color: AppColors.textHint),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Acest bun nu are niciun împrumut activ.',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (isLoaned) ...[
+                  if (asset.loanedToName != null)
+                    _LoanInfoRow(
+                      icon: Icons.person_rounded,
+                      label: 'Împrumutat la',
+                      value: asset.loanedToName!,
+                      highlight: true,
+                      highlightColor: sectionColor,
+                    ),
+                  if (asset.loanedAt != null)
+                    _LoanInfoRow(
+                      icon: Icons.calendar_today_rounded,
+                      label: 'Data împrumutului',
+                      value: dateFmt.format(asset.loanedAt!),
+                    ),
+                  if (asset.loanReturnedAt != null)
+                    _LoanInfoRow(
+                      icon: Icons.event_available_rounded,
+                      label: 'Returnat la',
+                      value: dateFmt.format(asset.loanReturnedAt!),
+                      highlightColor: AppColors.success,
+                      highlight: true,
+                    ),
+                  if (asset.loanCondition != null && asset.loanCondition!.isNotEmpty)
+                    _LoanInfoRow(
+                      icon: Icons.info_outline_rounded,
+                      label: 'Stare la împrumut',
+                      value: asset.loanCondition!,
+                    ),
+                  if (asset.loanConditionOnReturn != null &&
+                      asset.loanConditionOnReturn!.isNotEmpty)
+                    _LoanInfoRow(
+                      icon: Icons.assignment_turned_in_outlined,
+                      label: 'Stare la returnare',
+                      value: asset.loanConditionOnReturn!,
+                      highlightColor: AppColors.success,
+                      highlight: true,
+                    ),
+                  if (asset.loanNotes != null && asset.loanNotes!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.notes_rounded, size: 14, color: AppColors.textHint),
+                              SizedBox(width: 5),
+                              Text(
+                                'NOTE',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textHint,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            asset.loanNotes!,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+              ],
+            ),
+          ),
+          // ── Buton Istoric Împrumuturi ──
+          if (assetIdInt != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+              child: GestureDetector(
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => LoanHistorySheet(assetId: assetIdInt),
+                  );
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.history_rounded, color: AppColors.primary, size: 18),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Vezi istoricul împrumuturilor',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.arrow_forward_ios_rounded,
+                          color: AppColors.primary, size: 13),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   // ─── BASIC INFO ──────────────────────────────────────────────
   Widget _buildBasicInfoSection() {
     final hasDescription = asset.description != null && asset.description!.isNotEmpty;
@@ -422,6 +811,17 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
                   daysLeft: asset.warrantyDaysLeft,
                   statusColor: statusColor,
                 ),
+              const SizedBox(height: 4),
+              _DocumentTile(
+                fileName: asset.warrantyDocumentFileName,
+                onTap: asset.warrantyDocumentId != null
+                    ? () => _downloadAndOpenDocument(
+                          type: 'warranty',
+                          documentId: asset.warrantyDocumentId!,
+                          fileName: asset.warrantyDocumentFileName!,
+                        )
+                    : null,
+              ),
             ]
           : [
               _EmptyHint(
@@ -468,6 +868,17 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
                   daysLeft: asset.insuranceDaysLeft,
                   statusColor: statusColor,
                 ),
+              const SizedBox(height: 4),
+              _DocumentTile(
+                fileName: asset.insuranceDocumentFileName,
+                onTap: asset.insuranceDocumentId != null
+                    ? () => _downloadAndOpenDocument(
+                          type: 'insurance',
+                          documentId: asset.insuranceDocumentId!,
+                          fileName: asset.insuranceDocumentFileName!,
+                        )
+                    : null,
+              ),
             ]
           : [
               _EmptyHint(
@@ -722,6 +1133,66 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
 // ═══════════════════════════════════════════════════════════════════
 // REUSABLE WIDGETS
 // ═══════════════════════════════════════════════════════════════════
+
+class _LoanInfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool highlight;
+  final Color? highlightColor;
+
+  const _LoanInfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.highlight = false,
+    this.highlightColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = highlight
+        ? (highlightColor ?? AppColors.primary)
+        : AppColors.textPrimary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: AppColors.textHint),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.textHint,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 14,
+                    fontWeight: highlight
+                        ? FontWeight.w700
+                        : FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _SectionCard extends StatelessWidget {
   final String title;
@@ -1119,6 +1590,115 @@ class _ActionButton extends StatelessWidget {
         elevation: 0,
         shadowColor: color.withValues(alpha: 0.4),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+}
+
+class _DocumentTile extends StatelessWidget {
+  final String? fileName;
+  final VoidCallback? onTap;
+
+  const _DocumentTile({this.fileName, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFile = fileName != null && fileName!.isNotEmpty;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: hasFile
+              ? AppColors.primary.withValues(alpha: 0.06)
+              : AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: hasFile
+                ? AppColors.primary.withValues(alpha: 0.2)
+                : AppColors.divider.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: hasFile
+                    ? AppColors.primary.withValues(alpha: 0.1)
+                    : AppColors.divider.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                hasFile
+                    ? Icons.insert_drive_file_rounded
+                    : Icons.file_present_outlined,
+                size: 18,
+                color: hasFile ? AppColors.primary : AppColors.textHint,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Document',
+                    style: TextStyle(
+                      color: AppColors.textHint,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hasFile ? fileName! : 'Lipsă',
+                    style: TextStyle(
+                      color: hasFile
+                          ? AppColors.textPrimary
+                          : AppColors.textHint,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      fontStyle:
+                          hasFile ? FontStyle.normal : FontStyle.italic,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            if (hasFile && onTap != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.download_rounded,
+                        size: 13, color: Colors.white),
+                    SizedBox(width: 4),
+                    Text(
+                      'Descarcă',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

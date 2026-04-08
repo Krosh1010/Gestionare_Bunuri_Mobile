@@ -12,6 +12,14 @@ class AssetModel extends Asset {
     super.createdAt,
     super.spaceId,
     super.spaceName,
+    super.isLoaned,
+    super.loanId,
+    super.loanedToName,
+    super.loanCondition,
+    super.loanNotes,
+    super.loanedAt,
+    super.loanReturnedAt,
+    super.loanConditionOnReturn,
     super.warrantyStatus,
     super.warrantyStartDate,
     super.warrantyEndDate,
@@ -30,7 +38,7 @@ class AssetModel extends Asset {
     super.customTrackerEndDate,
   });
 
-  /// Maps API category string to enum
+
   static AssetCategory _mapCategory(String? category) {
     switch (category?.toLowerCase()) {
       case 'electronics':
@@ -65,7 +73,7 @@ class AssetModel extends Asset {
     }
   }
 
-  /// Maps API insuranceStatus int to enum
+
   /// 0=notStarted, 1=active, 2=expiringSoon, 3=expired, null=unknown
   static InsuranceStatus _mapInsuranceStatus(dynamic status) {
     if (status == null) return InsuranceStatus.unknown;
@@ -84,7 +92,7 @@ class AssetModel extends Asset {
     }
   }
 
-  /// Maps API customTrackerStatus int to enum
+
   /// 0=notStarted, 1=active, 2=expiringSoon, 3=expired, null=unknown
   static CustomTrackerStatus _mapCustomTrackerStatus(dynamic status) {
     if (status == null) return CustomTrackerStatus.unknown;
@@ -103,7 +111,7 @@ class AssetModel extends Asset {
     }
   }
 
-  /// Parse a DateTime from a JSON string, or return null
+
   static DateTime? _parseDate(dynamic value) {
     if (value == null) return null;
     return DateTime.tryParse(value.toString());
@@ -121,6 +129,14 @@ class AssetModel extends Asset {
       createdAt: _parseDate(json['createdAt']),
       spaceId: json['spaceId'] as int?,
       spaceName: json['spaceName'] as String?,
+      isLoaned: json['isLoaned'] as bool? ?? false,
+      loanId: json['loanId'] as int?,
+      loanedToName: json['loanedToName'] as String?,
+      loanCondition: json['loanCondition'] as String?,
+      loanNotes: json['loanNotes'] as String?,
+      loanedAt: _parseDate(json['loanedAt']),
+      loanReturnedAt: _parseDate(json['loanReturnedAt']),
+      loanConditionOnReturn: json['loanConditionOnReturn'] as String?,
       warrantyStatus: _mapWarrantyStatus(json['warrantyStatus']),
       warrantyStartDate: _parseDate(json['warrantyStartDate']),
       warrantyEndDate: _parseDate(json['warrantyEndDate']),

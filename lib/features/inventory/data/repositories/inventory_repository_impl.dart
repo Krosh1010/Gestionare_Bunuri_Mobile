@@ -135,4 +135,36 @@ class InventoryRepositoryImpl implements InventoryRepository {
   Future<void> deleteCustomTracker(int trackerId) async {
     await remoteDataSource.deleteCustomTracker(trackerId);
   }
+
+  // ── Loan ──────────────────────────────────────────────────────
+
+  @override
+  Future<Map<String, dynamic>?> getActiveLoanByAsset(int assetId) async {
+    return await remoteDataSource.getActiveLoanByAsset(assetId);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getLoanHistory(int assetId) async {
+    return await remoteDataSource.getLoanHistory(assetId);
+  }
+
+  @override
+  Future<void> createLoan(Map<String, dynamic> data) async {
+    await remoteDataSource.createLoan(data);
+  }
+
+  @override
+  Future<void> updateLoan(int loanId, Map<String, dynamic> data) async {
+    await remoteDataSource.updateLoan(loanId, data);
+  }
+
+  @override
+  Future<void> returnLoan(int loanId, Map<String, dynamic> data) async {
+    await remoteDataSource.returnLoan(loanId, data);
+  }
+
+  @override
+  Future<void> deleteLoan(int loanId) async {
+    await remoteDataSource.deleteLoan(loanId);
+  }
 }

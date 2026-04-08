@@ -1173,6 +1173,9 @@ class _AssetListCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 6,
                 children: [
+                  // Loaned badge
+                  if (asset.isLoaned)
+                    _LoanedBadge(),
                   // Warranty badge
                   _WarrantyBadge(
                     emoji: '🛡️',
@@ -1435,6 +1438,37 @@ class _CustomTrackerBadge extends StatelessWidget {
                 color: c,
               ),
               overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoanedBadge extends StatelessWidget {
+  const _LoanedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.lock_clock_rounded, size: 12, color: AppColors.error),
+          const SizedBox(width: 4),
+          Text(
+            'Împrumutat',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: AppColors.error,
             ),
           ),
         ],

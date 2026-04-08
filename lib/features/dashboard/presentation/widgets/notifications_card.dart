@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class NotificationData {
   final String id;
-  final int type; // 0 = warranty, 1 = insurance
+  final int type; // 0 = warranty, 1 = insurance, 2 = tracker
   final String message;
 
   const NotificationData({
@@ -151,10 +151,32 @@ class _NotificationItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isUrgent = notification.type == 0;
-    final borderColor = isUrgent
-        ? const Color(0xFFEF4444)
-        : const Color(0xFFF59E0B);
+    final Color borderColor;
+    final String emoji;
+    final String title;
+
+    switch (notification.type) {
+      case 0:
+        borderColor = const Color(0xFFEF4444);
+        emoji = '⚠️';
+        title = 'Garanție';
+        break;
+      case 1:
+        borderColor = const Color(0xFFF59E0B);
+        emoji = '📋';
+        title = 'Asigurare';
+        break;
+      case 2:
+        borderColor = const Color(0xFF667EEA);
+        emoji = '🔔';
+        title = 'Tracker';
+        break;
+      default:
+        borderColor = const Color(0xFF6B7280);
+        emoji = 'ℹ️';
+        title = 'Notificare';
+        break;
+    }
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -181,7 +203,7 @@ class _NotificationItem extends StatelessWidget {
             height: 32,
             child: Center(
               child: Text(
-                isUrgent ? '⚠️' : '📋',
+                emoji,
                 style: const TextStyle(fontSize: 20),
               ),
             ),
@@ -193,7 +215,7 @@ class _NotificationItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isUrgent ? 'Garanție expiră' : 'Asigurare expiră',
+                  title,
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF111827),
