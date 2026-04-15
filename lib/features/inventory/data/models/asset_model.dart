@@ -36,6 +36,7 @@ class AssetModel extends Asset {
     super.customTrackerName,
     super.customTrackerStatus,
     super.customTrackerEndDate,
+    super.barcode,
   });
 
 
@@ -153,6 +154,7 @@ class AssetModel extends Asset {
       customTrackerName: json['customTrackerName'] as String?,
       customTrackerStatus: _mapCustomTrackerStatus(json['customTrackerStatus']),
       customTrackerEndDate: _parseDate(json['customTrackerEndDate']),
+      barcode: json['barcode'] as String?,
     );
   }
 
@@ -177,6 +179,7 @@ class AssetModel extends Asset {
       'customTrackerName': customTrackerName,
       'customTrackerStatus': _customTrackerStatusToInt(customTrackerStatus),
       'customTrackerEndDate': customTrackerEndDate?.toIso8601String(),
+      'barcode': barcode,
     };
   }
 

@@ -37,6 +37,11 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
+  Future<Asset> getAssetByBarcode(String barcode) async {
+    return await remoteDataSource.getAssetByBarcode(barcode);
+  }
+
+  @override
   Future<Asset> addAsset(Map<String, dynamic> data) async {
     return await remoteDataSource.addAsset(data);
   }
@@ -136,7 +141,6 @@ class InventoryRepositoryImpl implements InventoryRepository {
     await remoteDataSource.deleteCustomTracker(trackerId);
   }
 
-  // ── Loan ──────────────────────────────────────────────────────
 
   @override
   Future<Map<String, dynamic>?> getActiveLoanByAsset(int assetId) async {

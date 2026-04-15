@@ -7,6 +7,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/network/api_client.dart';
 import '../../domain/entities/asset.dart';
 import '../../domain/repositories/inventory_repository.dart';
+import 'barcode_scanner_page.dart';
 
 class AddAssetPage extends StatefulWidget {
   const AddAssetPage({super.key});
@@ -25,12 +26,15 @@ class _AddAssetPageState extends State<AddAssetPage> {
   DateTime _purchaseDate = DateTime.now();
   bool _isSaving = false;
 
+
+  String? _scannedBarcode;
+
   // Spații – suport multi-nivel
-  /// Fiecare nivel: lista de spații disponibile
+
   List<List<_SpaceItem>> _spaceLevels = [];
-  /// Spațiul selectat la fiecare nivel
+
   List<_SpaceItem?> _selectedAtLevel = [];
-  /// Loading state per nivel
+
   List<bool> _loadingAtLevel = [];
 
   bool _loadingParents = true;
@@ -66,15 +70,15 @@ class _AddAssetPageState extends State<AddAssetPage> {
   }
 
   Future<void> _loadChildrenAtLevel(int level, String parentId) async {
-    // Adaugă un nivel nou sau resetează nivelul existent
+
     setState(() {
-      // Elimină toate nivelurile de la `level` în sus
+
       if (_spaceLevels.length > level) {
         _spaceLevels = _spaceLevels.sublist(0, level);
         _selectedAtLevel = _selectedAtLevel.sublist(0, level);
         _loadingAtLevel = _loadingAtLevel.sublist(0, level);
       }
-      // Adaugă noul nivel cu loading
+
       _spaceLevels.add([]);
       _selectedAtLevel.add(null);
       _loadingAtLevel.add(true);
@@ -93,7 +97,7 @@ class _AddAssetPageState extends State<AddAssetPage> {
     }
   }
 
-  /// ID-ul spațiului selectat final (cel mai adânc nivel selectat)
+
   int? get _selectedSpaceId {
     for (int i = _selectedAtLevel.length - 1; i >= 0; i--) {
       if (_selectedAtLevel[i] != null) return _selectedAtLevel[i]!.id;
@@ -101,7 +105,7 @@ class _AddAssetPageState extends State<AddAssetPage> {
     return null;
   }
 
-  /// Calea completă a spațiului selectat (ex: "Casă → Dormitor → Dulap")
+
   String get _selectedSpacePath {
     final parts = <String>[];
     for (final s in _selectedAtLevel) {
@@ -207,6 +211,8 @@ class _AddAssetPageState extends State<AddAssetPage> {
         'value': double.tryParse(_valueController.text.trim()) ?? 0,
         'purchaseDate': _purchaseDate.toIso8601String(),
         'spaceId': _selectedSpaceId,
+        if (_scannedBarcode != null && _scannedBarcode!.isNotEmpty)
+          'barcode': _scannedBarcode,
       };
 
       final asset = await sl<InventoryRepository>().addAsset(data);
@@ -360,6 +366,12 @@ class _AddAssetPageState extends State<AddAssetPage> {
               const _SectionTitle(title: 'Spațiu'),
               const SizedBox(height: 14),
               _buildSpaceSelector(),
+              const SizedBox(height: 24),
+
+              // ─── Cod de bare (opțional) ─────────────────────
+              const _SectionTitle(title: 'Cod de bare (opțional)'),
+              const SizedBox(height: 14),
+              _buildBarcodeSection(),
               const SizedBox(height: 36),
 
               // ─── Buton Salvare ──────────────────────────────
@@ -402,9 +414,9 @@ class _AddAssetPageState extends State<AddAssetPage> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
+
   // CATEGORY SELECTOR
-  // ═══════════════════════════════════════════════════════════
+
   Widget _buildCategorySelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,9 +479,9 @@ class _AddAssetPageState extends State<AddAssetPage> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
+
   // SPACE SELECTOR (hierarchical: multi-level)
-  // ═══════════════════════════════════════════════════════════
+
   Widget _buildSpaceSelector() {
     if (_loadingParents) {
       return Container(
@@ -554,14 +566,14 @@ class _AddAssetPageState extends State<AddAssetPage> {
                 final currentLevel = level;
                 setState(() {
                   _selectedAtLevel[currentLevel] = space;
-                  // Elimină toate nivelurile de sub acesta
+
                   if (_spaceLevels.length > currentLevel + 1) {
                     _spaceLevels = _spaceLevels.sublist(0, currentLevel + 1);
                     _selectedAtLevel = _selectedAtLevel.sublist(0, currentLevel + 1);
                     _loadingAtLevel = _loadingAtLevel.sublist(0, currentLevel + 1);
                   }
                 });
-                // Dacă spațiul selectat are copii, încarcă nivelul următor
+
                 if (space != null && space.childrenCount > 0) {
                   _loadChildrenAtLevel(currentLevel + 1, space.id.toString());
                 }
@@ -571,7 +583,7 @@ class _AddAssetPageState extends State<AddAssetPage> {
                       final currentLevel = level;
                       setState(() {
                         _selectedAtLevel[currentLevel] = null;
-                        // Elimină nivelurile de sub acesta
+
                         if (_spaceLevels.length > currentLevel + 1) {
                           _spaceLevels = _spaceLevels.sublist(0, currentLevel + 1);
                           _selectedAtLevel = _selectedAtLevel.sublist(0, currentLevel + 1);
@@ -583,7 +595,7 @@ class _AddAssetPageState extends State<AddAssetPage> {
             ),
         ],
 
-        // Afișare spațiu selectat
+
         if (_selectedSpaceId != null) ...[
           const SizedBox(height: 12),
           Container(
@@ -690,9 +702,9 @@ class _AddAssetPageState extends State<AddAssetPage> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
+
   // TEXT FIELD BUILDER
-  // ═══════════════════════════════════════════════════════════
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -737,11 +749,175 @@ class _AddAssetPageState extends State<AddAssetPage> {
           : null,
     );
   }
+
+
+  // BARCODE SECTION
+
+  Widget _buildBarcodeSection() {
+    if (_scannedBarcode != null && _scannedBarcode!.isNotEmpty) {
+      // Codul de bare a fost scanat – afișăm rezultatul
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.qr_code_rounded, color: AppColors.success, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Cod de bare scanat',
+                        style: TextStyle(
+                          color: AppColors.success,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _scannedBarcode!,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _openBarcodeScanner,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Rescanează'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() => _scannedBarcode = null);
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text('Șterge'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: const BorderSide(color: AppColors.error),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Cod de bare nescanat – afișăm butonul de scanare
+    return GestureDetector(
+      onTap: _openBarcodeScanner,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.divider,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 28),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Scanează cod de bare',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Apasă pentru a scana codul de bare al produsului',
+                    style: TextStyle(
+                      color: AppColors.textHint,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textHint),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openBarcodeScanner() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => const BarcodeScannerPage(),
+      ),
+    );
+    if (result != null && result.isNotEmpty && mounted) {
+      setState(() {
+        _scannedBarcode = result;
+      });
+    }
+  }
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // SECTION TITLE WIDGET
-// ═══════════════════════════════════════════════════════════════════
+
 
 class _SectionTitle extends StatelessWidget {
   final String title;
@@ -771,9 +947,9 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // SPACE ITEM MODEL (local, for the form)
-// ═══════════════════════════════════════════════════════════════════
+
 
 class _SpaceItem {
   final int id;

@@ -7,7 +7,7 @@ class ApiClient {
   ApiClient({String? baseUrl}) {
     _dio = Dio(
       BaseOptions(
-        baseUrl: baseUrl ?? 'http://192.168.1.5:5288/api',
+        baseUrl: baseUrl ?? 'http://192.168.100.234:5288/api',
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),
         headers: {

@@ -123,7 +123,7 @@ class AssetDetailPage extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 class _AssetDetailView extends StatefulWidget {
   final Asset asset;
   const _AssetDetailView({required this.asset});
@@ -253,6 +253,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
                 _buildQuickStats(),
                 _buildLoanSection(),
                 _buildBasicInfoSection(),
+                _buildBarcodeSection(),
                 _buildWarrantySection(),
                 _buildInsuranceSection(),
                 _buildCustomTrackerSection(),
@@ -268,7 +269,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
-  // ─── SLIVER APP BAR ──────────────────────────────────────────
+  // SLIVER APP BAR
   Widget _buildSliverAppBar(BuildContext context) {
     return SliverAppBar(
       expandedHeight: 220,
@@ -456,7 +457,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
-  // ─── QUICK STATS ─────────────────────────────────────────────
+  //  QUICK STATS
   Widget _buildQuickStats() {
     final formatted = NumberFormat('#,##0', 'ro_RO').format(asset.value);
     return Padding(
@@ -498,7 +499,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
-  // ─── LOAN SECTION ────────────────────────────────────────────
+  // LOAN SECTION
   Widget _buildLoanSection() {
     final assetIdInt = int.tryParse(asset.id);
     final isLoaned = asset.isLoaned;
@@ -712,7 +713,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
               ],
             ),
           ),
-          // ── Buton Istoric Împrumuturi ──
+          //  Buton Istoric Împrumuturi
           if (assetIdInt != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
@@ -759,7 +760,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
-  // ─── BASIC INFO ──────────────────────────────────────────────
+  //  BASIC INFO
   Widget _buildBasicInfoSection() {
     final hasDescription = asset.description != null && asset.description!.isNotEmpty;
     if (!hasDescription) return const SizedBox.shrink();
@@ -781,7 +782,87 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
-  // ─── WARRANTY ────────────────────────────────────────────────
+  //  BARCODE
+  Widget _buildBarcodeSection() {
+    final hasBarcode = asset.barcode != null && asset.barcode!.isNotEmpty;
+    return _SectionCard(
+      title: 'Cod de bare',
+      icon: Icons.qr_code_rounded,
+      iconColor: const Color(0xFF8B5CF6),
+      children: [
+        if (hasBarcode)
+          GestureDetector(
+            onLongPress: () {
+              Clipboard.setData(ClipboardData(text: asset.barcode!));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(Icons.copy_rounded, color: Colors.white, size: 16),
+                      SizedBox(width: 8),
+                      Text('Cod copiat în clipboard'),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFF8B5CF6),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  margin: const EdgeInsets.all(16),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.qr_code_2_rounded, color: Color(0xFF8B5CF6), size: 28),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          asset.barcode!,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                            letterSpacing: 1.5,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        const Text(
+                          'Ține apăsat pentru a copia',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textHint,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.copy_rounded, color: AppColors.textHint, size: 16),
+                ],
+              ),
+            ),
+          )
+        else
+          _EmptyHint(
+            message: 'Niciun cod de bare asociat',
+            icon: Icons.qr_code_rounded,
+          ),
+      ],
+    );
+  }
+
+  //  WARRANTY
   Widget _buildWarrantySection() {
     final hasWarranty = asset.warrantyStatus != WarrantyStatus.unknown &&
         asset.warrantyStatus != WarrantyStatus.notStarted;
@@ -831,7 +912,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
-  // ─── INSURANCE ───────────────────────────────────────────────
+  //  INSURANCE
   Widget _buildInsuranceSection() {
     final hasInsurance = asset.insuranceStatus != InsuranceStatus.unknown;
     final statusColor = _getInsuranceStatusColor(asset.insuranceStatus);
@@ -888,7 +969,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
-  // ─── CUSTOM TRACKER ──────────────────────────────────────────
+  //  CUSTOM TRACKER
   Widget _buildCustomTrackerSection() {
     final hasTracker = asset.customTrackerStatus != CustomTrackerStatus.unknown;
     final statusColor = _getTrackerStatusColor(asset.customTrackerStatus);
@@ -925,7 +1006,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
-  // ─── METADATA ────────────────────────────────────────────────
+  //  METADATA
   Widget _buildMetadataSection() {
     if (asset.createdAt == null) return const SizedBox.shrink();
     return Padding(
@@ -947,7 +1028,7 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
     );
   }
 
-  // ─── BOTTOM ACTIONS ──────────────────────────────────────────
+  //  BOTTOM ACTIONS
   Widget _buildBottomActions(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -1130,9 +1211,9 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // REUSABLE WIDGETS
-// ═══════════════════════════════════════════════════════════════════
+
 
 class _LoanInfoRow extends StatelessWidget {
   final IconData icon;

@@ -118,6 +118,22 @@ class AppRouter {
         },
       ),
       GoRoute(
+        path: '/inventory/barcode-result',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final asset = state.extra;
+          if (asset is Asset) {
+            return BlocProvider(
+              create: (_) => sl<AssetDetailCubit>()..loadFromAsset(asset),
+              child: AssetDetailPage(assetId: asset.id),
+            );
+          }
+          return const Scaffold(
+            body: Center(child: Text('Eroare: bunul nu a fost găsit')),
+          );
+        },
+      ),
+      GoRoute(
         path: '/inventory/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {

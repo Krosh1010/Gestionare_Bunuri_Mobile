@@ -6,9 +6,11 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/entities/asset.dart';
+import '../../domain/repositories/inventory_repository.dart';
 import '../bloc/inventory_bloc.dart';
 import '../../../spaces/domain/entities/space.dart';
 import '../../../spaces/domain/repositories/spaces_repository.dart';
+import 'barcode_scanner_page.dart';
 
 class InventoryPage extends StatelessWidget {
   const InventoryPage({super.key});
@@ -50,6 +52,149 @@ class _InventoryViewState extends State<_InventoryView> {
     if (mounted) {
       context.read<InventoryBloc>().add(LoadAssets());
     }
+  }
+
+  // ─── BARCODE SCAN & SEARCH
+  Future<void> _scanBarcodeAndSearch(BuildContext context) async {
+    // 1. Deschide scanner-ul
+    final barcode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
+    );
+
+    if (barcode == null || barcode.isEmpty || !mounted) return;
+
+    // Așteptăm ca navigator-ul să termine tranziția de la scanner
+    await Future.delayed(const Duration(milliseconds: 100));
+    if (!mounted) return;
+
+    // 2. Afișează loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: AppColors.primary),
+                SizedBox(height: 16),
+                Text('Se caută bunul...', style: TextStyle(fontSize: 14)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // 3. Caută bunul pe backend
+      final asset = await sl<InventoryRepository>().getAssetByBarcode(barcode);
+
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // închide loading
+
+      // 4. Succes → navigare la pagina de detalii cu datele deja primite
+      await context.push('/inventory/barcode-result', extra: asset);
+      if (mounted) {
+        context.read<InventoryBloc>().add(LoadAssets());
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // închide loading
+
+      // 5. Eroare (404 sau altceva) → dialog cu opțiuni
+      _showBarcodeNotFoundDialog(context, barcode);
+    }
+  }
+
+  void _showBarcodeNotFoundDialog(BuildContext context, String barcode) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.search_off_rounded, color: AppColors.warning, size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Bun negăsit',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Nu s-a găsit niciun bun asociat cu acest cod de bare.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.qr_code_rounded, color: AppColors.textHint, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      barcode,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Dorești să creezi un bun nou cu acest cod de bare?',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Anulează'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // Navigare la adăugare bun – trimitem barcode-ul ca extra
+              context.push('/inventory/add', extra: barcode);
+            },
+            icon: const Icon(Icons.add_rounded, color: Colors.white, size: 18),
+            label: const Text('Creează bun', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -96,7 +241,7 @@ class _InventoryViewState extends State<_InventoryView> {
     );
   }
 
-  // ─── HEADER ───────────────────────────────────────────────────
+  // ─── HEADER
   Widget _buildHeader(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
@@ -133,22 +278,31 @@ class _InventoryViewState extends State<_InventoryView> {
               ),
             ],
           ),
-          BlocBuilder<InventoryBloc, InventoryState>(
-            builder: (context, state) {
-              final filterCount = state is InventoryLoaded ? state.activeFiltersCount : 0;
-              return _HeaderIconButton(
-                icon: Icons.tune_rounded,
-                badge: filterCount,
-                onTap: () => _showAdvancedFilters(context),
-              );
-            },
+          Row(
+            children: [
+              _HeaderIconButton(
+                icon: Icons.qr_code_scanner_rounded,
+                onTap: () => _scanBarcodeAndSearch(context),
+              ),
+              const SizedBox(width: 8),
+              BlocBuilder<InventoryBloc, InventoryState>(
+                builder: (context, state) {
+                  final filterCount = state is InventoryLoaded ? state.activeFiltersCount : 0;
+                  return _HeaderIconButton(
+                    icon: Icons.tune_rounded,
+                    badge: filterCount,
+                    onTap: () => _showAdvancedFilters(context),
+                  );
+                },
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  // ─── STATS OVERVIEW ──────────────────────────────────────────
+  // ─── STATS OVERVIEW
   Widget _buildStatsOverview(BuildContext context) {
     return BlocBuilder<InventoryBloc, InventoryState>(
       builder: (context, state) {
@@ -191,7 +345,7 @@ class _InventoryViewState extends State<_InventoryView> {
     return '${value.toStringAsFixed(0)} RON';
   }
 
-  // ─── SEARCH BAR ──────────────────────────────────────────────
+  // ─── SEARCH BAR
   Widget _buildSearchAndActions(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
@@ -235,7 +389,7 @@ class _InventoryViewState extends State<_InventoryView> {
     );
   }
 
-  // ─── FILTER CHIPS ────────────────────────────────────────────
+  // ─── FILTER CHIPS
   Widget _buildFilterChips(BuildContext context) {
     return BlocBuilder<InventoryBloc, InventoryState>(
       builder: (context, state) {
@@ -293,7 +447,7 @@ class _InventoryViewState extends State<_InventoryView> {
     );
   }
 
-  // ─── RESULTS COUNT ───────────────────────────────────────────
+  // ─── RESULTS COUNT
   Widget _buildResultsCount(BuildContext context) {
     return BlocBuilder<InventoryBloc, InventoryState>(
       builder: (context, state) {
@@ -312,7 +466,7 @@ class _InventoryViewState extends State<_InventoryView> {
     );
   }
 
-  // ─── ASSET LIST ─────────────────────────────────────────────
+  // ─── ASSET LIST
   Widget _buildAssetList(BuildContext context) {
     return BlocBuilder<InventoryBloc, InventoryState>(
       builder: (context, state) {
@@ -427,7 +581,7 @@ class _InventoryViewState extends State<_InventoryView> {
     );
   }
 
-  // ─── EMPTY STATE ─────────────────────────────────────────────
+  // ─── EMPTY STATE
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Padding(
@@ -483,7 +637,7 @@ class _InventoryViewState extends State<_InventoryView> {
     );
   }
 
-  // ─── ADVANCED FILTERS ────────────────────────────────────────
+  // ─── ADVANCED FILTERS
   void _showAdvancedFilters(BuildContext context) {
     final bloc = context.read<InventoryBloc>();
     final state = bloc.state;
@@ -744,11 +898,11 @@ class _InventoryViewState extends State<_InventoryView> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// REUSABLE WIDGETS
-// ═══════════════════════════════════════════════════════════════════
 
-// ─── HEADER ICON BUTTON ────────────────────────────────────────
+// REUSABLE WIDGETS
+
+
+// ─── HEADER ICON BUTTON
 class _HeaderIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -802,7 +956,7 @@ class _HeaderIconButton extends StatelessWidget {
   }
 }
 
-// ─── STAT CARD ─────────────────────────────────────────────────
+// ─── STAT CARD
 class _StatCard extends StatelessWidget {
   final String emoji;
   final String value;
@@ -867,7 +1021,7 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ─── CATEGORY CHIP ─────────────────────────────────────────────
+// ─── CATEGORY CHIP
 class _CategoryChip extends StatelessWidget {
   final String label;
   final String? emoji;
@@ -920,7 +1074,7 @@ class _CategoryChip extends StatelessWidget {
   }
 }
 
-// ─── FILTER SECTION TITLE ──────────────────────────────────────
+// ─── FILTER SECTION TITLE
 class _FilterSectionTitle extends StatelessWidget {
   final String emoji;
   final String title;
@@ -947,7 +1101,7 @@ class _FilterSectionTitle extends StatelessWidget {
   }
 }
 
-// ─── ADVANCED FILTER CHIP ──────────────────────────────────────
+// ─── ADVANCED FILTER CHIP
 class _AdvancedFilterChip extends StatelessWidget {
   final String emoji;
   final String label;
@@ -996,7 +1150,7 @@ class _AdvancedFilterChip extends StatelessWidget {
   }
 }
 
-// ─── PRICE INPUT ───────────────────────────────────────────────
+// ─── PRICE INPUT
 class _PriceInput extends StatelessWidget {
   final String label;
   final TextEditingController controller;
@@ -1051,9 +1205,9 @@ class _PriceInput extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // ASSET LIST CARD
-// ═══════════════════════════════════════════════════════════════════
+
 class _AssetListCard extends StatelessWidget {
   final Asset asset;
   final void Function(Asset) onTap;
@@ -1206,9 +1360,9 @@ class _AssetListCard extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // SHARED SMALL WIDGETS
-// ═══════════════════════════════════════════════════════════════════
+
 
 class _CategoryIconBox extends StatelessWidget {
   final AssetCategory category;
@@ -1477,9 +1631,9 @@ class _LoanedBadge extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // SPACE PICKER – simple two-level dropdowns
-// ═══════════════════════════════════════════════════════════════════
+
 class _SpacePicker extends StatefulWidget {
   final int? initialSpaceId;
   final void Function(int id, String name) onSpaceSelected;

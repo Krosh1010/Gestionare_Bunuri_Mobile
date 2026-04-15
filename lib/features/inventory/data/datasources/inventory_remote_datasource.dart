@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -16,6 +17,7 @@ abstract class InventoryRemoteDataSource {
     int? spaceId,
   });
   Future<AssetModel> getAssetById(String id);
+  Future<AssetModel> getAssetByBarcode(String barcode);
   Future<AssetModel> addAsset(Map<String, dynamic> data);
   Future<AssetModel> updateAsset(String id, Map<String, dynamic> data);
   Future<void> deleteAsset(String id);
@@ -95,6 +97,12 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   }
 
   @override
+  Future<AssetModel> getAssetByBarcode(String barcode) async {
+    final response = await apiClient.dio.get('/Assets/barcode/$barcode');
+    return AssetModel.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
   Future<AssetModel> addAsset(Map<String, dynamic> data) async {
     final response = await apiClient.dio.post('/Assets', data: data);
     return AssetModel.fromJson(response.data as Map<String, dynamic>);
@@ -102,7 +110,11 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
 
   @override
   Future<AssetModel> updateAsset(String id, Map<String, dynamic> data) async {
-    await apiClient.dio.patch('/Assets/$id', data: data);
+    await apiClient.dio.patch(
+      '/Assets/$id',
+      data: jsonEncode(data),
+      options: Options(headers: {'Content-Type': 'application/json'}),
+    );
     // PATCH returns a plain string, not JSON — fetch the updated asset separately
     final response = await apiClient.dio.get('/Assets/$id');
     return AssetModel.fromJson(response.data as Map<String, dynamic>);
@@ -291,8 +303,6 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   Future<void> deleteCustomTracker(int trackerId) async {
     await apiClient.dio.delete('/CustomTracker/$trackerId');
   }
-
-  // ── Loan ──────────────────────────────────────────────────────
 
   @override
   Future<Map<String, dynamic>?> getActiveLoanByAsset(int assetId) async {

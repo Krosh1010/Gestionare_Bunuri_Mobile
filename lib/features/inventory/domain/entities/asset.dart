@@ -57,6 +57,9 @@ class Asset extends Equatable {
   final CustomTrackerStatus customTrackerStatus;
   final DateTime? customTrackerEndDate;
 
+  // Barcode
+  final String? barcode;
+
   const Asset({
     required this.id,
     required this.name,
@@ -92,6 +95,7 @@ class Asset extends Equatable {
     this.customTrackerName,
     this.customTrackerStatus = CustomTrackerStatus.unknown,
     this.customTrackerEndDate,
+    this.barcode,
   });
 
   // Convenience getters
@@ -224,5 +228,6 @@ class Asset extends Equatable {
         customTrackerName,
         customTrackerStatus,
         customTrackerEndDate,
+        barcode,
       ];
 }

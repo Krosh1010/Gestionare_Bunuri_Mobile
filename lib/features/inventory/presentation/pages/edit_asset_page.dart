@@ -7,6 +7,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/network/api_client.dart';
 import '../../domain/entities/asset.dart';
 import '../../domain/repositories/inventory_repository.dart';
+import 'barcode_scanner_page.dart';
 import 'warranty_form_sheet.dart';
 import 'insurance_form_sheet.dart';
 import 'custom_tracker_form_sheet.dart';
@@ -25,13 +26,14 @@ class _EditAssetPageState extends State<EditAssetPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _valueController;
+  late final TextEditingController _barcodeController;
 
   late AssetCategory _selectedCategory;
   late DateTime _purchaseDate;
   bool _isSaving = false;
   late Asset _currentAsset;
 
-  // Spații – suport multi-nivel
+
   List<List<_SpaceItem>> _spaceLevels = [];
   List<_SpaceItem?> _selectedAtLevel = [];
   List<bool> _loadingAtLevel = [];
@@ -44,6 +46,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
     _nameController = TextEditingController(text: widget.asset.name);
     _descriptionController = TextEditingController(text: widget.asset.description ?? '');
     _valueController = TextEditingController(text: widget.asset.value.toStringAsFixed(0));
+    _barcodeController = TextEditingController(text: widget.asset.barcode ?? '');
     _selectedCategory = widget.asset.category;
     _purchaseDate = widget.asset.purchaseDate;
 
@@ -55,10 +58,11 @@ class _EditAssetPageState extends State<EditAssetPage> {
     _nameController.dispose();
     _descriptionController.dispose();
     _valueController.dispose();
+    _barcodeController.dispose();
     super.dispose();
   }
 
-  /// Încarcă arborele de spații pe baza path-ului curent al asset-ului
+
   Future<void> _loadSpacesForAsset() async {
     try {
       // 1. Încarcă părinții (nivel 0)
@@ -81,7 +85,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
       try {
         pathResponse = await sl<InventoryRepository>().getSpacePath(widget.asset.spaceId!);
       } catch (_) {
-        // Dacă path-ul nu poate fi încărcat, afișăm doar părinții
+
         setState(() {
           _spaceLevels = [parents];
           _selectedAtLevel = [null];
@@ -109,7 +113,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
       for (int i = 0; i < pathResponse.length; i++) {
         final pathItem = _SpaceItem.fromJson(pathResponse[i]);
 
-        // Caută elementul în lista de la nivelul curent
+
         final currentLevelItems = _spaceLevels[i];
         _SpaceItem? matchingItem;
         for (final item in currentLevelItems) {
@@ -118,11 +122,11 @@ class _EditAssetPageState extends State<EditAssetPage> {
             break;
           }
         }
-        // Dacă nu-l găsim (caz rar), folosim item-ul din path
+
         matchingItem ??= pathItem;
         _selectedAtLevel[i] = matchingItem;
 
-        // Încarcă copiii dacă nu e ultimul din path SAU dacă e ultimul dar are copii
+
         if (i < pathResponse.length - 1 || matchingItem.childrenCount > 0) {
           try {
             final childrenResponse = await sl<ApiClient>().dio.get('/Spaces/children/${matchingItem.id}');
@@ -143,7 +147,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
         _loadingSpaces = false;
       });
     } catch (e) {
-      // Fallback: încarcă doar părinții
+
       try {
         final parentsResponse = await sl<ApiClient>().dio.get('/Spaces/parents');
         final parentsList = parentsResponse.data as List;
@@ -288,6 +292,9 @@ class _EditAssetPageState extends State<EditAssetPage> {
     setState(() => _isSaving = true);
 
     try {
+      final barcodeValue = _barcodeController.text.trim();
+      final String? newBarcode = barcodeValue.isEmpty ? null : barcodeValue;
+
       final data = {
         'name': _nameController.text.trim(),
         'description': _descriptionController.text.trim().isEmpty
@@ -297,6 +304,8 @@ class _EditAssetPageState extends State<EditAssetPage> {
         'value': double.tryParse(_valueController.text.trim()) ?? 0,
         'purchaseDate': _purchaseDate.toIso8601String(),
         'spaceId': _selectedSpaceId,
+        'barcode': newBarcode,
+        'barcodeIsSet': true,
       };
 
       await sl<InventoryRepository>().updateAsset(widget.asset.id, data);
@@ -424,6 +433,15 @@ class _EditAssetPageState extends State<EditAssetPage> {
     }
   }
 
+  Future<void> _scanBarcodeForEdit() async {
+    final barcode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
+    );
+    if (barcode != null && barcode.isNotEmpty && mounted) {
+      setState(() => _barcodeController.text = barcode);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateFormatter = DateFormat('dd.MM.yyyy');
@@ -464,7 +482,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ─── Informații de bază ──────────────────────────
+              //  Informații de bază
               const _SectionTitle(title: 'Informații de bază'),
               const SizedBox(height: 14),
               _buildTextField(
@@ -484,7 +502,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
               ),
               const SizedBox(height: 24),
 
-              // ─── Valoare & Dată ─────────────────────────────
+              // Valoare & Dată
               const _SectionTitle(title: 'Valoare & Dată Achiziție'),
               const SizedBox(height: 14),
               _buildTextField(
@@ -536,13 +554,19 @@ class _EditAssetPageState extends State<EditAssetPage> {
               ),
               const SizedBox(height: 24),
 
-              // ─── Spațiu ─────────────────────────────────────
+              // Spațiu
               const _SectionTitle(title: 'Spațiu'),
               const SizedBox(height: 14),
               _buildSpaceSelector(),
               const SizedBox(height: 24),
 
-              // ─── Garanție, Asigurare & Urmărire ───────────────────────
+              //  Cod de bare
+              const _SectionTitle(title: 'Cod de bare'),
+              const SizedBox(height: 14),
+              _buildBarcodeField(),
+              const SizedBox(height: 24),
+
+              //  Garanție, Asigurare & Urmărire
               const _SectionTitle(title: 'Garanție, Asigurare & Urmărire'),
               const SizedBox(height: 14),
               Row(
@@ -598,7 +622,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
               ),
               const SizedBox(height: 36),
 
-              // ─── Buton Salvare ──────────────────────────────
+              //  Buton Salvare
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -638,9 +662,227 @@ class _EditAssetPageState extends State<EditAssetPage> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
+
+  // BARCODE FIELD
+
+  Widget _buildBarcodeField() {
+    return StatefulBuilder(
+      builder: (context, setLocal) {
+        final hasBarcode = _barcodeController.text.isNotEmpty;
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: hasBarcode
+                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.4)
+                  : AppColors.divider,
+              width: hasBarcode ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.qr_code_rounded,
+                        color: Color(0xFF8B5CF6), size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Cod de bare',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          hasBarcode
+                              ? _barcodeController.text
+                              : 'Niciun cod asociat',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: hasBarcode
+                                ? const Color(0xFF8B5CF6)
+                                : AppColors.textHint,
+                            fontWeight: hasBarcode
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            letterSpacing: hasBarcode ? 1.0 : 0,
+                            fontStyle: hasBarcode
+                                ? FontStyle.normal
+                                : FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              // Câmp text editabil
+              TextFormField(
+                controller: _barcodeController,
+                onChanged: (_) => setLocal(() {}),
+                keyboardType: TextInputType.number,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Ex: 1234567890128',
+                  hintStyle: const TextStyle(
+                    color: AppColors.textHint,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0,
+                  ),
+                  prefixIcon: const Icon(Icons.qr_code_2_rounded,
+                      color: AppColors.textHint, size: 20),
+                  suffixIcon: hasBarcode
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded,
+                              color: AppColors.textHint, size: 20),
+                          tooltip: 'Șterge codul',
+                          onPressed: () {
+                            _barcodeController.clear();
+                            setLocal(() {});
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: AppColors.background,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: AppColors.divider.withValues(alpha: 0.6)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: AppColors.divider.withValues(alpha: 0.6)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                        color: Color(0xFF8B5CF6), width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              //  Buton scanare
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await _scanBarcodeForEdit();
+                    setLocal(() {});
+                  },
+                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                  label: const Text('Scanează cu camera'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF8B5CF6),
+                    side: BorderSide(
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              if (hasBarcode) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18)),
+                          title: const Row(
+                            children: [
+                              Icon(Icons.delete_outline_rounded,
+                                  color: AppColors.error, size: 22),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Șterge codul de bare',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: const Text(
+                            'Ești sigur că vrei să elimini codul de bare asociat acestui bun?',
+                            style: TextStyle(
+                                color: AppColors.textSecondary, fontSize: 14),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Anulează'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _barcodeController.clear();
+                                setLocal(() {});
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.error,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                              child: const Text('Șterge'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        size: 16, color: AppColors.error),
+                    label: const Text('Elimină codul de bare',
+                        style:
+                            TextStyle(color: AppColors.error, fontSize: 13)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+
   // ACTION CARD (for warranty / insurance)
-  // ═══════════════════════════════════════════════════════════
+
   Widget _buildActionCard({
     required IconData icon,
     required String label,
@@ -700,9 +942,9 @@ class _EditAssetPageState extends State<EditAssetPage> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
+
   // CATEGORY SELECTOR
-  // ═══════════════════════════════════════════════════════════
+
   Widget _buildCategorySelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -765,9 +1007,9 @@ class _EditAssetPageState extends State<EditAssetPage> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
+
   // SPACE SELECTOR (hierarchical: multi-level)
-  // ═══════════════════════════════════════════════════════════
+
   Widget _buildSpaceSelector() {
     if (_loadingSpaces) {
       return Container(
@@ -984,9 +1226,9 @@ class _EditAssetPageState extends State<EditAssetPage> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════
+
   // TEXT FIELD BUILDER
-  // ═══════════════════════════════════════════════════════════
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -1033,9 +1275,8 @@ class _EditAssetPageState extends State<EditAssetPage> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
 // SECTION TITLE WIDGET
-// ═══════════════════════════════════════════════════════════════════
+
 
 class _SectionTitle extends StatelessWidget {
   final String title;
@@ -1065,9 +1306,9 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // SPACE ITEM MODEL (local, for the form)
-// ═══════════════════════════════════════════════════════════════════
+
 
 class _SpaceItem {
   final int id;

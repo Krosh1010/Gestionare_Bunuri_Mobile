@@ -35,6 +35,11 @@ class AssetDetailCubit extends Cubit<AssetDetailState> {
 
   AssetDetailCubit({required this.repository}) : super(AssetDetailInitial());
 
+
+  void loadFromAsset(Asset asset) {
+    emit(AssetDetailLoaded(asset));
+  }
+
   Future<void> loadAssetDetail(String assetId) async {
     emit(AssetDetailLoading());
     try {
