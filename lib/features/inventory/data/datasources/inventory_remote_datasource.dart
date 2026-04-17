@@ -42,10 +42,13 @@ abstract class InventoryRemoteDataSource {
   // Loan
   Future<Map<String, dynamic>?> getActiveLoanByAsset(int assetId);
   Future<List<Map<String, dynamic>>> getLoanHistory(int assetId);
-  Future<void> createLoan(Map<String, dynamic> data);
-  Future<void> updateLoan(int loanId, Map<String, dynamic> data);
+  Future<void> createLoan(Map<String, dynamic> data, {List<File>? documents});
+  Future<void> updateLoan(int loanId, Map<String, dynamic> data, {List<File>? documents});
   Future<void> returnLoan(int loanId, Map<String, dynamic> data);
   Future<void> deleteLoan(int loanId);
+  Future<Uint8List> downloadLoanDocument(int documentId);
+  Future<void> deleteLoanDocument(int documentId);
+  Future<void> deleteAllLoanDocuments(int loanId);
 }
 
 class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
@@ -132,6 +135,7 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
       'Provider': data['provider'],
       'StartDate': data['startDate'],
       'EndDate': data['endDate'],
+      if (data['spaceId'] != null) 'SpaceId': data['spaceId'],
       if (document != null)
         'document': await MultipartFile.fromFile(
           document.path,
@@ -149,6 +153,7 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
       'InsuredValue': data['insuredValue'],
       'StartDate': data['startDate'],
       'EndDate': data['endDate'],
+      if (data['spaceId'] != null) 'SpaceId': data['spaceId'],
       if (document != null)
         'document': await MultipartFile.fromFile(
           document.path,
@@ -182,6 +187,10 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
     if (data.containsKey('provider')) formMap['Provider'] = data['provider'];
     if (data.containsKey('startDate')) formMap['StartDate'] = data['startDate'];
     if (data.containsKey('endDate')) formMap['EndDate'] = data['endDate'];
+    if (data.containsKey('spaceIdIsSet') && data['spaceIdIsSet'] == true) {
+      formMap['SpaceIdIsSet'] = true;
+      formMap['SpaceId'] = data['spaceId'];
+    }
     if (document != null) {
       formMap['document'] = await MultipartFile.fromFile(
         document.path,
@@ -210,6 +219,10 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
     if (data.containsKey('insuredValue')) formMap['InsuredValue'] = data['insuredValue'];
     if (data.containsKey('startDate')) formMap['StartDate'] = data['startDate'];
     if (data.containsKey('endDate')) formMap['EndDate'] = data['endDate'];
+    if (data.containsKey('spaceIdIsSet') && data['spaceIdIsSet'] == true) {
+      formMap['SpaceIdIsSet'] = true;
+      formMap['SpaceId'] = data['spaceId'];
+    }
     if (document != null) {
       formMap['document'] = await MultipartFile.fromFile(
         document.path,
@@ -323,13 +336,48 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   }
 
   @override
-  Future<void> createLoan(Map<String, dynamic> data) async {
-    await apiClient.dio.post('/loan/create', data: data);
+  Future<void> createLoan(Map<String, dynamic> data, {List<File>? documents}) async {
+    final formData = FormData.fromMap({
+      'AssetId': data['assetId'],
+      'LoanedToName': data['loanedToName'],
+      'Condition': data['condition'],
+      'Notes': data['notes'],
+      'LoanedAt': data['loanedAt'],
+    });
+    if (documents != null) {
+      for (final doc in documents) {
+        formData.files.add(MapEntry(
+          'documents',
+          await MultipartFile.fromFile(
+            doc.path,
+            filename: doc.path.split(Platform.pathSeparator).last,
+          ),
+        ));
+      }
+    }
+    await apiClient.dio.post('/loan/create', data: formData);
   }
 
   @override
-  Future<void> updateLoan(int loanId, Map<String, dynamic> data) async {
-    await apiClient.dio.patch('/loan/$loanId', data: data);
+  Future<void> updateLoan(int loanId, Map<String, dynamic> data, {List<File>? documents}) async {
+    final formData = FormData.fromMap({
+      if (data.containsKey('loanedToName')) 'LoanedToName': data['loanedToName'],
+      if (data.containsKey('condition')) 'Condition': data['condition'],
+      if (data.containsKey('notes')) 'Notes': data['notes'],
+      if (data.containsKey('loanedAt')) 'LoanedAt': data['loanedAt'],
+    });
+    if (documents != null) {
+      for (final doc in documents) {
+        formData.files.add(MapEntry(
+          'documents',
+          await MultipartFile.fromFile(
+            doc.path,
+            filename: doc.path.split(Platform.pathSeparator).last,
+          ),
+        ));
+      }
+    }
+    await apiClient.dio.patch('/loan/$loanId', data: formData);
   }
 
   @override
@@ -340,5 +388,24 @@ class InventoryRemoteDataSourceImpl implements InventoryRemoteDataSource {
   @override
   Future<void> deleteLoan(int loanId) async {
     await apiClient.dio.delete('/loan/$loanId');
+  }
+
+  @override
+  Future<Uint8List> downloadLoanDocument(int documentId) async {
+    final response = await apiClient.dio.get(
+      '/loan/document/$documentId/download',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data as List<int>);
+  }
+
+  @override
+  Future<void> deleteLoanDocument(int documentId) async {
+    await apiClient.dio.delete('/loan/document/$documentId');
+  }
+
+  @override
+  Future<void> deleteAllLoanDocuments(int loanId) async {
+    await apiClient.dio.delete('/loan/$loanId/documents');
   }
 }

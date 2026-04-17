@@ -38,8 +38,11 @@ abstract class InventoryRepository {
 
   Future<Map<String, dynamic>?> getActiveLoanByAsset(int assetId);
   Future<List<Map<String, dynamic>>> getLoanHistory(int assetId);
-  Future<void> createLoan(Map<String, dynamic> data);
-  Future<void> updateLoan(int loanId, Map<String, dynamic> data);
+  Future<void> createLoan(Map<String, dynamic> data, {List<File>? documents});
+  Future<void> updateLoan(int loanId, Map<String, dynamic> data, {List<File>? documents});
   Future<void> returnLoan(int loanId, Map<String, dynamic> data);
   Future<void> deleteLoan(int loanId);
+  Future<Uint8List> downloadLoanDocument(int documentId);
+  Future<void> deleteLoanDocument(int documentId);
+  Future<void> deleteAllLoanDocuments(int loanId);
 }

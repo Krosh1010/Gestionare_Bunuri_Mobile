@@ -26,6 +26,7 @@ class _PostSaveMenuPageState extends State<PostSaveMenuPage> {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => WarrantyFormSheet(assetId: widget.assetId),
     );
@@ -46,6 +47,7 @@ class _PostSaveMenuPageState extends State<PostSaveMenuPage> {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => InsuranceFormSheet(assetId: widget.assetId),
     );

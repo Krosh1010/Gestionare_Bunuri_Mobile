@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/inventory_repository.dart';
@@ -94,6 +98,7 @@ class _CreateLoanViewState extends State<_CreateLoanView> {
   final _notesCtrl = TextEditingController();
   DateTime _loanedAt = DateTime.now();
   bool _saving = false;
+  List<File> _selectedDocuments = [];
 
   @override
   void dispose() {
@@ -124,17 +129,37 @@ class _CreateLoanViewState extends State<_CreateLoanView> {
     if (picked != null) setState(() => _loanedAt = picked);
   }
 
+  Future<void> _pickDocuments() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
+    );
+    if (result != null) {
+      setState(() {
+        _selectedDocuments.addAll(
+          result.files
+              .where((f) => f.path != null)
+              .map((f) => File(f.path!)),
+        );
+      });
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      await sl<InventoryRepository>().createLoan({
-        'assetId': widget.assetId,
-        'loanedToName': _nameCtrl.text.trim(),
-        'condition': _conditionCtrl.text.trim(),
-        'notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-        'loanedAt': _loanedAt.toIso8601String(),
-      });
+      await sl<InventoryRepository>().createLoan(
+        {
+          'assetId': widget.assetId,
+          'loanedToName': _nameCtrl.text.trim(),
+          'condition': _conditionCtrl.text.trim(),
+          'notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+          'loanedAt': _loanedAt.toIso8601String(),
+        },
+        documents: _selectedDocuments.isEmpty ? null : _selectedDocuments,
+      );
       if (mounted) widget.onCreated();
     } catch (e) {
       if (mounted) {
@@ -277,6 +302,90 @@ class _CreateLoanViewState extends State<_CreateLoanView> {
               maxLines: 3,
               hint: 'Orice informații suplimentare...',
             ),
+            const SizedBox(height: 14),
+            // Documente (opțional)
+            GestureDetector(
+              onTap: _pickDocuments,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: AppColors.divider.withValues(alpha: 0.7)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.attach_file_rounded,
+                        color: AppColors.textHint, size: 18),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Documente atașate (opțional)',
+                            style: TextStyle(
+                              color: AppColors.textHint,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _selectedDocuments.isEmpty
+                                ? 'Apasă pentru a selecta fișiere'
+                                : '${_selectedDocuments.length} fișier(e) selectat(e)',
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.add_rounded, color: AppColors.primary),
+                  ],
+                ),
+              ),
+            ),
+            // Lista fișierelor selectate
+            if (_selectedDocuments.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ...List.generate(_selectedDocuments.length, (i) {
+                final fileName = _selectedDocuments[i].path.split(Platform.pathSeparator).last;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.insert_drive_file_rounded, color: AppColors.textHint, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            fileName,
+                            style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() => _selectedDocuments.removeAt(i)),
+                          child: const Icon(Icons.close_rounded, color: AppColors.error, size: 18),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+             }),
+            ],
             const SizedBox(height: 24),
             // Buton Salvare
             SizedBox(
@@ -354,6 +463,12 @@ class _ActiveLoanViewState extends State<_ActiveLoanView> {
 
   bool _saving = false;
 
+  // Documents
+  List<Map<String, dynamic>> _existingDocuments = [];
+  List<File> _newDocuments = [];
+  bool _isDownloading = false;
+  static const _fileChannel = MethodChannel('com.example.gestionare_bunuri_mobile/file_handler');
+
   int get _loanId => widget.loan['loanId'] as int? ?? widget.loan['id'] as int;
 
   @override
@@ -362,14 +477,17 @@ class _ActiveLoanViewState extends State<_ActiveLoanView> {
     _nameCtrl = TextEditingController(
         text: widget.loan['loanedToName'] as String? ?? '');
     _conditionCtrl = TextEditingController(
-        // API returnează 'condition', nu 'loanCondition'
         text: widget.loan['condition'] as String? ?? '');
     _notesCtrl = TextEditingController(
-        // API returnează 'notes', nu 'loanNotes'
         text: widget.loan['notes'] as String? ?? '');
     final rawDate = widget.loan['loanedAt'] as String?;
     _loanedAt =
         rawDate != null ? DateTime.tryParse(rawDate) ?? DateTime.now() : DateTime.now();
+    // Load existing documents from loan data
+    final docs = widget.loan['documents'];
+    if (docs is List) {
+      _existingDocuments = docs.map((d) => Map<String, dynamic>.from(d as Map)).toList();
+    }
   }
 
   @override
@@ -412,6 +530,21 @@ class _ActiveLoanViewState extends State<_ActiveLoanView> {
     }
   }
 
+  Future<void> _pickNewDocuments() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
+    );
+    if (result != null) {
+      setState(() {
+        _newDocuments.addAll(
+          result.files.where((f) => f.path != null).map((f) => File(f.path!)),
+        );
+      });
+    }
+  }
+
   Future<void> _saveEdit() async {
     if (_nameCtrl.text.trim().isEmpty || _conditionCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -427,12 +560,16 @@ class _ActiveLoanViewState extends State<_ActiveLoanView> {
     }
     setState(() => _saving = true);
     try {
-      await sl<InventoryRepository>().updateLoan(_loanId, {
-        'loanedToName': _nameCtrl.text.trim(),
-        'condition': _conditionCtrl.text.trim(),
-        'notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-        'loanedAt': _loanedAt.toIso8601String(),
-      });
+      await sl<InventoryRepository>().updateLoan(
+        _loanId,
+        {
+          'loanedToName': _nameCtrl.text.trim(),
+          'condition': _conditionCtrl.text.trim(),
+          'notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+          'loanedAt': _loanedAt.toIso8601String(),
+        },
+        documents: _newDocuments.isEmpty ? null : _newDocuments,
+      );
       if (mounted) widget.onEdited();
     } catch (e) {
       if (mounted) {
@@ -511,6 +648,132 @@ class _ActiveLoanViewState extends State<_ActiveLoanView> {
         setState(() => _saving = false);
         _showError('$e');
       }
+    }
+  }
+
+  String _getMimeType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf': return 'application/pdf';
+      case 'doc': return 'application/msword';
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls': return 'application/vnd.ms-excel';
+      case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'png': return 'image/png';
+      case 'txt': return 'text/plain';
+      default: return 'application/octet-stream';
+    }
+  }
+
+  Future<void> _downloadDocument(int docId, String fileName) async {
+    setState(() => _isDownloading = true);
+    try {
+      final bytes = await sl<InventoryRepository>().downloadLoanDocument(docId);
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/$fileName';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes, flush: true);
+      final mimeType = _getMimeType(fileName);
+      await _fileChannel.invokeMethod('saveAndOpenFile', {
+        'filePath': filePath,
+        'fileName': fileName,
+        'mimeType': mimeType,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fișierul a fost salvat: $fileName'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) _showError('Eroare la descărcare: $e');
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
+    }
+  }
+
+  Future<void> _deleteDocument(int docId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Șterge Documentul'),
+        content: const Text('Ești sigur că vrei să ștergi acest document?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Anulează'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Șterge', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await sl<InventoryRepository>().deleteLoanDocument(docId);
+      if (mounted) {
+        setState(() {
+          _existingDocuments.removeWhere((d) => d['id'] == docId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Documentul a fost șters!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) _showError('Eroare la ștergere: $e');
+    }
+  }
+
+  Future<void> _deleteAllDocuments() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Șterge Toate Documentele'),
+        content: const Text('Ești sigur că vrei să ștergi toate documentele atașate?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Anulează'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Șterge Toate', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await sl<InventoryRepository>().deleteAllLoanDocuments(_loanId);
+      if (mounted) {
+        setState(() => _existingDocuments.clear());
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Toate documentele au fost șterse!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) _showError('Eroare: $e');
     }
   }
 
@@ -664,6 +927,158 @@ class _ActiveLoanViewState extends State<_ActiveLoanView> {
               maxLines: 3,
               hint: 'Informații suplimentare...',
             ),
+            const SizedBox(height: 14),
+            // Documente existente
+            if (_existingDocuments.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Text(
+                    'Documente existente',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: _saving ? null : _deleteAllDocuments,
+                    icon: const Icon(Icons.delete_sweep_rounded, size: 16, color: AppColors.error),
+                    label: const Text('Șterge toate', style: TextStyle(color: AppColors.error, fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ..._existingDocuments.map((doc) {
+                final fileName = doc['fileName'] as String? ?? 'Fișier necunoscut';
+                final docId = doc['id'] as int? ?? 0;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.insert_drive_file_rounded, color: AppColors.textHint, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            fileName,
+                            style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _isDownloading ? null : () => _downloadDocument(docId, fileName),
+                          icon: Icon(
+                            _isDownloading ? Icons.hourglass_empty : Icons.download_rounded,
+                            color: _isDownloading ? AppColors.textHint : AppColors.primary,
+                            size: 18,
+                          ),
+                          tooltip: 'Descarcă fișierul',
+                        ),
+                        IconButton(
+                          onPressed: _saving ? null : () => _deleteDocument(docId),
+                          icon: const Icon(Icons.delete_rounded, color: AppColors.error, size: 18),
+                          tooltip: 'Șterge fișierul',
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ],
+            const SizedBox(height: 14),
+            // Documente noi (opțional)
+            GestureDetector(
+              onTap: _pickNewDocuments,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: AppColors.divider.withValues(alpha: 0.7)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.attach_file_rounded,
+                        color: AppColors.textHint, size: 18),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Documente noi (opțional)',
+                            style: TextStyle(
+                              color: AppColors.textHint,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _newDocuments.isEmpty
+                                ? 'Apasă pentru a selecta fișiere'
+                                : '${_newDocuments.length} fișier(e) selectat(e)',
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.add_rounded, color: AppColors.primary),
+                  ],
+                ),
+              ),
+            ),
+            // Lista fișierelor noi selectate
+            if (_newDocuments.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ...List.generate(_newDocuments.length, (i) {
+                final fileName = _newDocuments[i].path.split(Platform.pathSeparator).last;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.insert_drive_file_rounded, color: AppColors.textHint, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            fileName,
+                            style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() => _newDocuments.removeAt(i)),
+                          child: const Icon(Icons.close_rounded, color: AppColors.error, size: 18),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ],
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,

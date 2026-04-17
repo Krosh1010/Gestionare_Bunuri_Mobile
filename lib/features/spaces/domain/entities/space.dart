@@ -9,6 +9,7 @@ class Space extends Equatable {
   final int? parentSpaceId;
   final int childrenCount;
   final int assetsCount;
+  final String? fullPath;
 
   const Space({
     required this.id,
@@ -17,6 +18,7 @@ class Space extends Equatable {
     this.parentSpaceId,
     this.childrenCount = 0,
     this.assetsCount = 0,
+    this.fullPath,
   });
 
   String get typeLabel {
@@ -50,6 +52,5 @@ class Space extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, name, type, parentSpaceId, childrenCount, assetsCount];
+  List<Object?> get props => [id, name, type, parentSpaceId, childrenCount, assetsCount, fullPath];
 }
-

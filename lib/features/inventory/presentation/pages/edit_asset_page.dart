@@ -4,9 +4,10 @@ import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injection_container.dart';
-import '../../../../core/network/api_client.dart';
 import '../../domain/entities/asset.dart';
 import '../../domain/repositories/inventory_repository.dart';
+import '../widgets/space_picker_widget.dart';
+import '../../../spaces/domain/entities/space.dart';
 import 'barcode_scanner_page.dart';
 import 'warranty_form_sheet.dart';
 import 'insurance_form_sheet.dart';
@@ -33,11 +34,8 @@ class _EditAssetPageState extends State<EditAssetPage> {
   bool _isSaving = false;
   late Asset _currentAsset;
 
-
-  List<List<_SpaceItem>> _spaceLevels = [];
-  List<_SpaceItem?> _selectedAtLevel = [];
-  List<bool> _loadingAtLevel = [];
-  bool _loadingSpaces = true;
+  // Spațiu selectat via picker
+  SelectedSpace? _selectedSpace;
 
   @override
   void initState() {
@@ -50,7 +48,15 @@ class _EditAssetPageState extends State<EditAssetPage> {
     _selectedCategory = widget.asset.category;
     _purchaseDate = widget.asset.purchaseDate;
 
-    _loadSpacesForAsset();
+    // Inițializează spațiul selectat din asset
+    if (widget.asset.spaceId != null) {
+      _selectedSpace = SelectedSpace(
+        id: widget.asset.spaceId!,
+        name: widget.asset.spaceName ?? '',
+        type: SpaceType.other, // Will be resolved by the picker when opened
+        fullPath: widget.asset.spaceName,
+      );
+    }
   }
 
   @override
@@ -62,147 +68,9 @@ class _EditAssetPageState extends State<EditAssetPage> {
     super.dispose();
   }
 
+  int? get _selectedSpaceId => _selectedSpace?.id;
 
-  Future<void> _loadSpacesForAsset() async {
-    try {
-      // 1. Încarcă părinții (nivel 0)
-      final parentsResponse = await sl<ApiClient>().dio.get('/Spaces/parents');
-      final parentsList = parentsResponse.data as List;
-      final parents = parentsList.map((json) => _SpaceItem.fromJson(json as Map<String, dynamic>)).toList();
-
-      if (widget.asset.spaceId == null) {
-        setState(() {
-          _spaceLevels = [parents];
-          _selectedAtLevel = [null];
-          _loadingAtLevel = [false];
-          _loadingSpaces = false;
-        });
-        return;
-      }
-
-      // 2. Încarcă path-ul spațiului curent
-      List<Map<String, dynamic>> pathResponse;
-      try {
-        pathResponse = await sl<InventoryRepository>().getSpacePath(widget.asset.spaceId!);
-      } catch (_) {
-
-        setState(() {
-          _spaceLevels = [parents];
-          _selectedAtLevel = [null];
-          _loadingAtLevel = [false];
-          _loadingSpaces = false;
-        });
-        return;
-      }
-
-      if (pathResponse.isEmpty) {
-        setState(() {
-          _spaceLevels = [parents];
-          _selectedAtLevel = [null];
-          _loadingAtLevel = [false];
-          _loadingSpaces = false;
-        });
-        return;
-      }
-
-      // 3. Reconstruim arborele pe baza path-ului
-      _spaceLevels = [parents];
-      _selectedAtLevel = [null];
-      _loadingAtLevel = [false];
-
-      for (int i = 0; i < pathResponse.length; i++) {
-        final pathItem = _SpaceItem.fromJson(pathResponse[i]);
-
-
-        final currentLevelItems = _spaceLevels[i];
-        _SpaceItem? matchingItem;
-        for (final item in currentLevelItems) {
-          if (item.id == pathItem.id) {
-            matchingItem = item;
-            break;
-          }
-        }
-
-        matchingItem ??= pathItem;
-        _selectedAtLevel[i] = matchingItem;
-
-
-        if (i < pathResponse.length - 1 || matchingItem.childrenCount > 0) {
-          try {
-            final childrenResponse = await sl<ApiClient>().dio.get('/Spaces/children/${matchingItem.id}');
-            final childrenList = childrenResponse.data as List;
-            final children = childrenList.map((json) => _SpaceItem.fromJson(json as Map<String, dynamic>)).toList();
-            if (children.isNotEmpty) {
-              _spaceLevels.add(children);
-              _selectedAtLevel.add(null);
-              _loadingAtLevel.add(false);
-            }
-          } catch (_) {
-            break;
-          }
-        }
-      }
-
-      setState(() {
-        _loadingSpaces = false;
-      });
-    } catch (e) {
-
-      try {
-        final parentsResponse = await sl<ApiClient>().dio.get('/Spaces/parents');
-        final parentsList = parentsResponse.data as List;
-        final parents = parentsList.map((json) => _SpaceItem.fromJson(json as Map<String, dynamic>)).toList();
-        setState(() {
-          _spaceLevels = [parents];
-          _selectedAtLevel = [null];
-          _loadingAtLevel = [false];
-          _loadingSpaces = false;
-        });
-      } catch (_) {
-        setState(() => _loadingSpaces = false);
-      }
-    }
-  }
-
-  Future<void> _loadChildrenAtLevel(int level, String parentId) async {
-    setState(() {
-      if (_spaceLevels.length > level) {
-        _spaceLevels = _spaceLevels.sublist(0, level);
-        _selectedAtLevel = _selectedAtLevel.sublist(0, level);
-        _loadingAtLevel = _loadingAtLevel.sublist(0, level);
-      }
-      _spaceLevels.add([]);
-      _selectedAtLevel.add(null);
-      _loadingAtLevel.add(true);
-    });
-    try {
-      final response = await sl<ApiClient>().dio.get('/Spaces/children/$parentId');
-      final list = response.data as List;
-      setState(() {
-        _spaceLevels[level] = list.map((json) => _SpaceItem.fromJson(json as Map<String, dynamic>)).toList();
-        _loadingAtLevel[level] = false;
-      });
-    } catch (e) {
-      setState(() {
-        _loadingAtLevel[level] = false;
-      });
-    }
-  }
-
-  int? get _selectedSpaceId {
-    for (int i = _selectedAtLevel.length - 1; i >= 0; i--) {
-      if (_selectedAtLevel[i] != null) return _selectedAtLevel[i]!.id;
-    }
-    return null;
-  }
-
-  String get _selectedSpacePath {
-    final parts = <String>[];
-    for (final s in _selectedAtLevel) {
-      if (s != null) parts.add(s.name);
-    }
-    return parts.join(' → ');
-  }
+  String get _selectedSpacePath => _selectedSpace?.fullPath ?? _selectedSpace?.name ?? '';
 
   Future<void> _selectDate(BuildContext context) async {
     final picked = await showDatePicker(
@@ -351,6 +219,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => WarrantyFormSheet(assetId: assetId),
     );
@@ -373,6 +242,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => InsuranceFormSheet(assetId: assetId),
     );
@@ -1011,117 +881,10 @@ class _EditAssetPageState extends State<EditAssetPage> {
   // SPACE SELECTOR (hierarchical: multi-level)
 
   Widget _buildSpaceSelector() {
-    if (_loadingSpaces) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.divider),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
-            SizedBox(width: 12),
-            Text('Se încarcă spațiile...', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-          ],
-        ),
-      );
-    }
-
-    if (_spaceLevels.isEmpty || _spaceLevels[0].isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.divider),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.info_outline_rounded, color: AppColors.textHint, size: 20),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Nu ai spații create. Creează un spațiu mai întâi.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (int level = 0; level < _spaceLevels.length; level++) ...[
-          if (level > 0) const SizedBox(height: 16),
-          Text(
-            level == 0 ? 'Spațiu principal' : 'Sub-spațiu nivel $level',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textHint,
-                  fontSize: 12,
-                ),
-          ),
-          const SizedBox(height: 8),
-          if (_loadingAtLevel[level])
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.divider),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
-                  SizedBox(width: 12),
-                  Text('Se încarcă sub-spațiile...', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                ],
-              ),
-            )
-          else
-            _buildSpaceDropdown(
-              items: _spaceLevels[level],
-              selectedItem: _selectedAtLevel[level],
-              hint: level == 0 ? 'Selectează spațiul principal...' : 'Selectează sub-spațiul...',
-              showClearButton: level > 0 && _selectedAtLevel[level] != null,
-              onChanged: (_SpaceItem? space) {
-                final currentLevel = level;
-                setState(() {
-                  _selectedAtLevel[currentLevel] = space;
-                  if (_spaceLevels.length > currentLevel + 1) {
-                    _spaceLevels = _spaceLevels.sublist(0, currentLevel + 1);
-                    _selectedAtLevel = _selectedAtLevel.sublist(0, currentLevel + 1);
-                    _loadingAtLevel = _loadingAtLevel.sublist(0, currentLevel + 1);
-                  }
-                });
-                if (space != null && space.childrenCount > 0) {
-                  _loadChildrenAtLevel(currentLevel + 1, space.id.toString());
-                }
-              },
-              onClear: level > 0
-                  ? () {
-                      final currentLevel = level;
-                      setState(() {
-                        _selectedAtLevel[currentLevel] = null;
-                        if (_spaceLevels.length > currentLevel + 1) {
-                          _spaceLevels = _spaceLevels.sublist(0, currentLevel + 1);
-                          _selectedAtLevel = _selectedAtLevel.sublist(0, currentLevel + 1);
-                          _loadingAtLevel = _loadingAtLevel.sublist(0, currentLevel + 1);
-                        }
-                      });
-                    }
-                  : null,
-            ),
-        ],
-
-        // Afișare spațiu selectat
         if (_selectedSpaceId != null) ...[
-          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -1146,83 +909,69 @@ class _EditAssetPageState extends State<EditAssetPage> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
         ],
-      ],
-    );
-  }
-
-  Widget _buildSpaceDropdown({
-    required List<_SpaceItem> items,
-    required _SpaceItem? selectedItem,
-    required String hint,
-    required ValueChanged<_SpaceItem?> onChanged,
-    bool showClearButton = false,
-    VoidCallback? onClear,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<_SpaceItem>(
-                value: selectedItem,
-                hint: Text(hint, style: const TextStyle(color: AppColors.textHint, fontSize: 14)),
-                isExpanded: true,
-                borderRadius: BorderRadius.circular(14),
-                dropdownColor: AppColors.surface,
-                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textHint),
-                items: items.map((space) {
-                  return DropdownMenuItem<_SpaceItem>(
-                    value: space,
-                    child: Row(
-                      children: [
-                        Text(space.emoji, style: const TextStyle(fontSize: 18)),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                space.name,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              if (space.childrenCount > 0)
-                                Text(
-                                  '${space.childrenCount} sub-spații',
-                                  style: const TextStyle(fontSize: 11, color: AppColors.textHint),
-                                ),
-                            ],
-                          ),
+        GestureDetector(
+          onTap: () async {
+            final space = await showDialog<SelectedSpace?>(
+              context: context,
+              builder: (context) => SpacePickerDialog(initialValue: _selectedSpace),
+            );
+            if (space != null) {
+              setState(() {
+                _selectedSpace = space;
+              });
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.location_on_rounded, color: AppColors.primary, size: 28),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _selectedSpaceId != null ? 'Spațiu selectat' : 'Selectează un spațiu',
+                        style: TextStyle(
+                          color: _selectedSpaceId != null ? AppColors.textPrimary : AppColors.textHint,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-                onChanged: onChanged,
-              ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _selectedSpaceId != null
+                            ? _selectedSpacePath
+                            : 'Apasă pentru a alege un spațiu',
+                        style: TextStyle(
+                          color: _selectedSpaceId != null ? AppColors.textSecondary : AppColors.textHint,
+                          fontSize: _selectedSpaceId != null ? 13 : 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: AppColors.textHint),
+              ],
             ),
           ),
-          if (showClearButton && onClear != null)
-            GestureDetector(
-              onTap: onClear,
-              child: const Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: Icon(Icons.close_rounded, color: AppColors.textHint, size: 20),
-              ),
-            ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1305,71 +1054,3 @@ class _SectionTitle extends StatelessWidget {
     );
   }
 }
-
-
-// SPACE ITEM MODEL (local, for the form)
-
-
-class _SpaceItem {
-  final int id;
-  final String name;
-  final String type;
-  final int childrenCount;
-
-  const _SpaceItem({
-    required this.id,
-    required this.name,
-    required this.type,
-    this.childrenCount = 0,
-  });
-
-  String get emoji {
-    switch (type.toLowerCase()) {
-      case 'home':
-        return '🏠';
-      case 'office':
-        return '🏢';
-      case 'room':
-        return '🚪';
-      case 'storage':
-        return '📦';
-      default:
-        return '📍';
-    }
-  }
-
-  static String _mapType(dynamic type) {
-    if (type is int) {
-      switch (type) {
-        case 0:
-          return 'home';
-        case 1:
-          return 'office';
-        case 2:
-          return 'room';
-        case 3:
-          return 'storage';
-        default:
-          return 'other';
-      }
-    }
-    return type?.toString() ?? 'other';
-  }
-
-  factory _SpaceItem.fromJson(Map<String, dynamic> json) {
-    return _SpaceItem(
-      id: json['id'] as int,
-      name: json['name'] as String? ?? '',
-      type: _mapType(json['type']),
-      childrenCount: json['childrenCount'] as int? ?? 0,
-    );
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is _SpaceItem && id == other.id;
-
-  @override
-  int get hashCode => id.hashCode;
-}
-

@@ -885,6 +885,12 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
                   label: 'Furnizor',
                   value: asset.warrantyProvider!,
                 ),
+              _InfoTile(
+                icon: Icons.location_on_rounded,
+                label: 'Spațiu',
+                value: asset.warrantySpaceName ?? 'Lipsă',
+                muted: asset.warrantySpaceName == null,
+              ),
               if (asset.warrantyStartDate != null && asset.warrantyEndDate != null)
                 _DateRangeRow(
                   start: asset.warrantyStartDate!,
@@ -942,6 +948,12 @@ class _AssetDetailViewState extends State<_AssetDetailView> {
                       '${NumberFormat('#,##0', 'ro_RO').format(asset.insuranceValue)} RON',
                   highlight: true,
                 ),
+              _InfoTile(
+                icon: Icons.location_on_rounded,
+                label: 'Spațiu',
+                value: asset.insuranceSpaceName ?? 'Lipsă',
+                muted: asset.insuranceSpaceName == null,
+              ),
               if (asset.insuranceStartDate != null && asset.insuranceEndDate != null)
                 _DateRangeRow(
                   start: asset.insuranceStartDate!,
@@ -1402,12 +1414,14 @@ class _InfoTile extends StatelessWidget {
   final String label;
   final String value;
   final bool highlight;
+  final bool muted;
 
   const _InfoTile({
     required this.icon,
     required this.label,
     required this.value,
     this.highlight = false,
+    this.muted = false,
   });
 
   @override
@@ -1434,9 +1448,14 @@ class _InfoTile extends StatelessWidget {
                 Text(
                   value,
                   style: TextStyle(
-                    color: highlight ? AppColors.primary : AppColors.textPrimary,
+                    color: muted
+                        ? AppColors.textHint
+                        : highlight
+                            ? AppColors.primary
+                            : AppColors.textPrimary,
                     fontSize: 14,
                     fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
+                    fontStyle: muted ? FontStyle.italic : FontStyle.normal,
                   ),
                 ),
               ],

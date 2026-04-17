@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/inventory_repository.dart';
+import '../widgets/space_picker_widget.dart';
+import '../../../spaces/domain/entities/space.dart';
 
 class InsuranceFormSheet extends StatefulWidget {
   final int assetId;
@@ -34,6 +36,10 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
   bool _isDeletingDocument = false;
   bool _isDownloading = false;
 
+  // Space
+  SelectedSpace? _selectedSpace;
+  bool _spaceChanged = false;
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +64,17 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
             _endDate = DateTime.tryParse(data['endDate'].toString()) ?? _endDate;
           }
           _existingDocumentFileName = data['documentFileName'] as String?;
+          // Space
+          final spaceId = data['spaceId'] as int?;
+          final spaceName = data['spaceName'] as String?;
+          if (spaceId != null) {
+            _selectedSpace = SelectedSpace(
+              id: spaceId,
+              name: spaceName ?? 'Spațiu #$spaceId',
+              type: SpaceType.other,
+              fullPath: spaceName,
+            );
+          }
           _isLoading = false;
         });
       } else {
@@ -241,7 +258,7 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
 
     setState(() => _isSaving = true);
     try {
-      final payload = {
+      final payload = <String, dynamic>{
         'assetId': widget.assetId,
         'company': _companyController.text.trim(),
         'insuredValue': double.tryParse(_valueController.text.trim()) ?? 0,
@@ -250,12 +267,21 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
       };
 
       if (_hasExisting) {
+        // For update, send spaceIdIsSet flag
+        if (_spaceChanged) {
+          payload['spaceIdIsSet'] = true;
+          payload['spaceId'] = _selectedSpace?.id;
+        }
         await sl<InventoryRepository>().updateInsuranceByAsset(
           widget.assetId,
           payload,
           document: _selectedDocument,
         );
       } else {
+        // For create, send spaceId if selected
+        if (_selectedSpace != null) {
+          payload['spaceId'] = _selectedSpace!.id;
+        }
         await sl<InventoryRepository>().addInsurance(
           payload,
           document: _selectedDocument,
@@ -318,370 +344,119 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: _isLoading
-          ? const SizedBox(
-              height: 200,
-              child: Center(
-                child: CircularProgressIndicator(color: Color(0xFF22C55E)),
-              ),
-            )
-          : Form(
-              key: _formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Handle
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.divider,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF22C55E).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.security_rounded, color: Color(0xFF22C55E), size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          _hasExisting ? 'Editează Asigurare' : 'Adaugă Asigurare',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Companie
-                    TextFormField(
-                      controller: _companyController,
-                      decoration: InputDecoration(
-                        labelText: 'Companie asigurare',
-                        prefixIcon: const Icon(Icons.business_rounded, color: AppColors.textHint, size: 20),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.divider),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.divider),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.error),
-                        ),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Câmp obligatoriu' : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Valoare asigurată
-                    TextFormField(
-                      controller: _valueController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Valoare asigurată (RON)',
-                        prefixIcon: const Icon(Icons.attach_money_rounded, color: AppColors.textHint, size: 20),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.divider),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.divider),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.error),
-                        ),
-                      ),
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Câmp obligatoriu';
-                        if (double.tryParse(v.trim()) == null) return 'Introdu o valoare validă';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Data început
-                    _buildDateTile(
-                      label: 'Data început',
-                      date: _startDate,
-                      onTap: () => _pickDate(true),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Data sfârșit
-                    _buildDateTile(
-                      label: 'Data sfârșit',
-                      date: _endDate,
-                      onTap: () => _pickDate(false),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Document section
-                    _buildDocumentSection(),
-                    const SizedBox(height: 28),
-
-                    // Salvare
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: (_isSaving || _isDeleting) ? null : _save,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF22C55E),
-                          disabledBackgroundColor: const Color(0xFF22C55E).withValues(alpha: 0.5),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        child: _isSaving
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : Text(
-                                _hasExisting ? 'Actualizează Asigurarea' : 'Salvează Asigurarea',
-                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
-                              ),
-                      ),
-                    ),
-                    if (_hasExisting) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: OutlinedButton.icon(
-                          onPressed: (_isSaving || _isDeleting) ? null : _delete,
-                          icon: _isDeleting
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error),
-                                )
-                              : const Icon(Icons.delete_rounded, color: AppColors.error),
-                          label: Text(
-                            _isDeleting ? 'Se șterge...' : 'Șterge Asigurarea',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.error,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.error),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+  Widget _buildSpaceSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_selectedSpace != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
             ),
-    );
-  }
-
-  Widget _buildDocumentSection() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.attach_file_rounded, color: AppColors.textHint, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Document atașat',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                'opțional',
-                style: TextStyle(fontSize: 11, color: AppColors.textHint),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Existing document on server
-          if (_existingDocumentFileName != null && _selectedDocument == null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF22C55E).withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.description_rounded, color: Color(0xFF22C55E), size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _existingDocumentFileName!,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF22C55E)),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
+            child: Row(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _isDownloading ? null : _downloadDocument,
-                    icon: _isDownloading
-                        ? const SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF22C55E)),
-                          )
-                        : const Icon(Icons.download_rounded, size: 18),
-                    label: Text(_isDownloading ? 'Se descarcă...' : 'Descarcă'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF22C55E),
-                      side: const BorderSide(color: Color(0xFF22C55E)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
+                const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _isDeletingDocument ? null : _deleteDocument,
-                    icon: _isDeletingDocument
-                        ? const SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error),
-                          )
-                        : const Icon(Icons.delete_outline_rounded, size: 18),
-                    label: Text(_isDeletingDocument ? 'Se șterge...' : 'Șterge'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                      side: const BorderSide(color: AppColors.error),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickDocument,
-                    icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                    label: const Text('Înlocuiește'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textSecondary,
-                      side: const BorderSide(color: AppColors.divider),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    _selectedSpace!.fullPath ?? _selectedSpace!.name,
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ],
             ),
-          ]
-          // Newly selected document
-          else if (_selectedDocument != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _selectedDocument!.path.split(Platform.pathSeparator).last,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        GestureDetector(
+          onTap: () async {
+            final space = await showDialog<SelectedSpace?>(
+              context: context,
+              builder: (context) => SpacePickerDialog(initialValue: _selectedSpace),
+            );
+            if (space != null) {
+              setState(() {
+                _selectedSpace = space;
+                _spaceChanged = true;
+              });
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
                   ),
+                  child: const Icon(Icons.location_on_rounded, color: AppColors.primary, size: 28),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _selectedSpace != null ? 'Spațiu selectat' : 'Selectează un spațiu',
+                        style: TextStyle(
+                          color: _selectedSpace != null ? AppColors.textPrimary : AppColors.textHint,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      if (_selectedSpace != null)
+                        Text(
+                          _selectedSpace!.fullPath ?? _selectedSpace!.name,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        )
+                      else
+                        Text(
+                          'Apasă pentru a alege un spațiu (opțional)',
+                          style: TextStyle(
+                            color: AppColors.textHint,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (_selectedSpace != null)
                   IconButton(
-                    onPressed: () => setState(() => _selectedDocument = null),
-                    icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textHint),
+                    onPressed: () {
+                      setState(() {
+                        _selectedSpace = null;
+                        _spaceChanged = true;
+                      });
+                    },
+                    icon: const Icon(Icons.close_rounded, size: 20, color: AppColors.textHint),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
+                  )
+                else
+                  const Icon(Icons.chevron_right_rounded, color: AppColors.textHint),
+              ],
             ),
-          ]
-          // No document
-          else ...[
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _pickDocument,
-                icon: const Icon(Icons.upload_file_rounded, size: 20),
-                label: const Text('Selectează document'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary,
-                  side: const BorderSide(color: AppColors.divider),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -713,6 +488,197 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
             const Spacer(),
             const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textHint),
           ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_hasExisting ? 'Editează Asigurarea' : 'Adaugă Asigurare'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          if (_hasExisting)
+            IconButton(
+              onPressed: _isDeleting ? null : _delete,
+              icon: _isDeleting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Icon(Icons.delete_outline_rounded),
+              tooltip: 'Șterge asigurarea',
+            ),
+        ],
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Company
+                const Text('Companie asigurări', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _companyController,
+                  decoration: InputDecoration(
+                    hintText: 'Numele companiei de asigurări',
+                    prefixIcon: const Icon(Icons.business_rounded),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Câmp obligatoriu' : null,
+                ),
+                const SizedBox(height: 20),
+
+                // Insured value
+                const Text('Valoare asigurată', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _valueController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: 'Valoare asigurată (MDL)',
+                    prefixIcon: const Icon(Icons.attach_money_rounded),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Câmp obligatoriu' : null,
+                ),
+                const SizedBox(height: 20),
+
+                // Dates
+                const Text('Perioada asigurării', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: _buildDateTile(label: 'De la', date: _startDate, onTap: () => _pickDate(true))),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildDateTile(label: 'Până la', date: _endDate, onTap: () => _pickDate(false))),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Space
+                const Text('Spațiu (opțional)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                const SizedBox(height: 8),
+                _buildSpaceSelector(),
+                const SizedBox(height: 20),
+
+                // Document
+                const Text('Document (opțional)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                const SizedBox(height: 8),
+                if (_existingDocumentFileName != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.insert_drive_file_rounded, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _existingDocumentFileName!,
+                            style: const TextStyle(fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _isDownloading ? null : _downloadDocument,
+                          icon: _isDownloading
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.download_rounded, size: 20),
+                        ),
+                        IconButton(
+                          onPressed: _isDeletingDocument ? null : _deleteDocument,
+                          icon: _isDeletingDocument
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (_selectedDocument != null)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.attach_file_rounded, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _selectedDocument!.path.split(Platform.pathSeparator).last,
+                            style: const TextStyle(fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => setState(() => _selectedDocument = null),
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: _pickDocument,
+                    icon: const Icon(Icons.upload_file_rounded),
+                    label: const Text('Încarcă document'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                const SizedBox(height: 32),
+
+                // Save button
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _isSaving ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Text(
+                            _hasExisting ? 'Salvează modificările' : 'Adaugă asigurarea',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

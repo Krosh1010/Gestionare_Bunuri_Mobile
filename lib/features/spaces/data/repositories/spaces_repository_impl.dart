@@ -23,6 +23,11 @@ class SpacesRepositoryImpl implements SpacesRepository {
   }
 
   @override
+  Future<List<Space>> searchSpaces(String query) async {
+    return await remoteDataSource.searchSpaces(query);
+  }
+
+  @override
   Future<Space> createSpace(Map<String, dynamic> data) async {
     return await remoteDataSource.createSpace(data);
   }

@@ -153,13 +153,13 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   @override
-  Future<void> createLoan(Map<String, dynamic> data) async {
-    await remoteDataSource.createLoan(data);
+  Future<void> createLoan(Map<String, dynamic> data, {List<File>? documents}) async {
+    await remoteDataSource.createLoan(data, documents: documents);
   }
 
   @override
-  Future<void> updateLoan(int loanId, Map<String, dynamic> data) async {
-    await remoteDataSource.updateLoan(loanId, data);
+  Future<void> updateLoan(int loanId, Map<String, dynamic> data, {List<File>? documents}) async {
+    await remoteDataSource.updateLoan(loanId, data, documents: documents);
   }
 
   @override
@@ -170,5 +170,20 @@ class InventoryRepositoryImpl implements InventoryRepository {
   @override
   Future<void> deleteLoan(int loanId) async {
     await remoteDataSource.deleteLoan(loanId);
+  }
+
+  @override
+  Future<Uint8List> downloadLoanDocument(int documentId) async {
+    return await remoteDataSource.downloadLoanDocument(documentId);
+  }
+
+  @override
+  Future<void> deleteLoanDocument(int documentId) async {
+    await remoteDataSource.deleteLoanDocument(documentId);
+  }
+
+  @override
+  Future<void> deleteAllLoanDocuments(int loanId) async {
+    await remoteDataSource.deleteAllLoanDocuments(loanId);
   }
 }

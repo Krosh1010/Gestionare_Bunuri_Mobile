@@ -42,6 +42,8 @@ class Asset extends Equatable {
   final String? warrantyProvider;
   final String? warrantyDocumentFileName;
   final int? warrantyDocumentId;
+  final int? warrantySpaceId;
+  final String? warrantySpaceName;
 
   // Insurance
   final InsuranceStatus insuranceStatus;
@@ -51,6 +53,8 @@ class Asset extends Equatable {
   final double? insuranceValue;
   final String? insuranceDocumentFileName;
   final int? insuranceDocumentId;
+  final int? insuranceSpaceId;
+  final String? insuranceSpaceName;
 
   // Custom Tracker
   final String? customTrackerName;
@@ -85,6 +89,8 @@ class Asset extends Equatable {
     this.warrantyProvider,
     this.warrantyDocumentFileName,
     this.warrantyDocumentId,
+    this.warrantySpaceId,
+    this.warrantySpaceName,
     this.insuranceStatus = InsuranceStatus.unknown,
     this.insuranceStartDate,
     this.insuranceEndDate,
@@ -92,6 +98,8 @@ class Asset extends Equatable {
     this.insuranceValue,
     this.insuranceDocumentFileName,
     this.insuranceDocumentId,
+    this.insuranceSpaceId,
+    this.insuranceSpaceName,
     this.customTrackerName,
     this.customTrackerStatus = CustomTrackerStatus.unknown,
     this.customTrackerEndDate,
@@ -218,6 +226,8 @@ class Asset extends Equatable {
         warrantyProvider,
         warrantyDocumentFileName,
         warrantyDocumentId,
+        warrantySpaceId,
+        warrantySpaceName,
         insuranceStatus,
         insuranceStartDate,
         insuranceEndDate,
@@ -225,6 +235,8 @@ class Asset extends Equatable {
         insuranceValue,
         insuranceDocumentFileName,
         insuranceDocumentId,
+        insuranceSpaceId,
+        insuranceSpaceName,
         customTrackerName,
         customTrackerStatus,
         customTrackerEndDate,

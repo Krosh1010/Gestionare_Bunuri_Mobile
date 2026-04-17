@@ -8,6 +8,7 @@ class SpaceModel extends Space {
     super.parentSpaceId,
     super.childrenCount,
     super.assetsCount,
+    super.fullPath,
   });
 
   static SpaceType _mapType(dynamic type) {
@@ -63,6 +64,7 @@ class SpaceModel extends Space {
       parentSpaceId: json['parentSpaceId'] as int?,
       childrenCount: json['childrenCount'] as int? ?? 0,
       assetsCount: json['assetsCount'] as int? ?? 0,
+      fullPath: json['fullPath'] as String?,
     );
   }
 
@@ -74,4 +76,3 @@ class SpaceModel extends Space {
     };
   }
 }
-

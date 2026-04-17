@@ -5,6 +5,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../domain/entities/space.dart';
 import '../../domain/repositories/spaces_repository.dart';
 import '../bloc/spaces_bloc.dart';
+import '../../../inventory/presentation/widgets/space_picker_widget.dart';
 
 class SpacesPage extends StatelessWidget {
   const SpacesPage({super.key});
@@ -515,27 +516,18 @@ class _SpacesViewState extends State<_SpacesView> {
     final nameController = TextEditingController();
     SpaceType selectedType = SpaceType.room;
 
-    // Multi-level space selection state
-    List<List<_SpaceOptionItem>> spaceLevels = [];
-    List<_SpaceOptionItem?> selectedAtLevel = [];
-    List<bool> loadingAtLevel = [];
-    bool loadingParents = true;
+    // Use SpacePickerWidget instead of cascading dropdowns
+    SelectedSpace? selectedParentSpace;
 
-    // Helper to get the selected parent space id (deepest selected level)
-    int? getSelectedParentId() {
-      for (int i = selectedAtLevel.length - 1; i >= 0; i--) {
-        if (selectedAtLevel[i] != null) return selectedAtLevel[i]!.id;
-      }
-      return null;
-    }
-
-    // Helper to get the full path of selected spaces
-    String getSelectedSpacePath() {
-      final parts = <String>[];
-      for (final s in selectedAtLevel) {
-        if (s != null) parts.add(s.name);
-      }
-      return parts.join(' → ');
+    // Pre-select parent if currently viewing children
+    if (currentState is SpacesLoaded && currentState.parentStack.isNotEmpty) {
+      final lastParent = currentState.parentStack.last;
+      selectedParentSpace = SelectedSpace(
+        id: lastParent.id,
+        name: lastParent.name,
+        type: lastParent.type,
+        fullPath: currentState.parentStack.map((s) => s.name).join(' > '),
+      );
     }
 
     showModalBottomSheet(
@@ -544,55 +536,6 @@ class _SpacesViewState extends State<_SpacesView> {
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) {
-          // Load parents on first build
-          if (loadingParents) {
-            loadingParents = false;
-            sl<SpacesRepository>().getParentSpaces().then((parents) {
-              setModalState(() {
-                spaceLevels = [parents.map((s) => _SpaceOptionItem.fromSpace(s)).toList()];
-                selectedAtLevel = [null];
-                loadingAtLevel = [false];
-
-                // If we are currently viewing children of a parent, pre-select levels
-                if (currentState is SpacesLoaded && currentState.parentStack.isNotEmpty) {
-                  _preselectLevels(currentState.parentStack, spaceLevels[0], spaceLevels, selectedAtLevel, loadingAtLevel, setModalState);
-                }
-              });
-            }).catchError((_) {
-              setModalState(() {
-                spaceLevels = [[]];
-                selectedAtLevel = [null];
-                loadingAtLevel = [false];
-              });
-            });
-          }
-
-          // Helper to load children at a specific level
-          void loadChildrenAtLevel(int level, int parentId) {
-            setModalState(() {
-              // Remove all levels from `level` onwards
-              if (spaceLevels.length > level) {
-                spaceLevels = spaceLevels.sublist(0, level);
-                selectedAtLevel = selectedAtLevel.sublist(0, level);
-                loadingAtLevel = loadingAtLevel.sublist(0, level);
-              }
-              // Add the new level with loading
-              spaceLevels.add([]);
-              selectedAtLevel.add(null);
-              loadingAtLevel.add(true);
-            });
-            sl<SpacesRepository>().getChildrenSpaces(parentId).then((children) {
-              setModalState(() {
-                spaceLevels[level] = children.map((s) => _SpaceOptionItem.fromSpace(s)).toList();
-                loadingAtLevel[level] = false;
-              });
-            }).catchError((_) {
-              setModalState(() {
-                loadingAtLevel[level] = false;
-              });
-            });
-          }
-
           return Padding(
             padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
             child: Container(
@@ -677,7 +620,7 @@ class _SpacesViewState extends State<_SpacesView> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Parent selector - multi-level cascading dropdowns
+                          // Parent selector - using SpacePickerWidget
                           const Text(
                             'LOCAȚIE PĂRINTE',
                             style: TextStyle(
@@ -689,238 +632,86 @@ class _SpacesViewState extends State<_SpacesView> {
                           ),
                           const SizedBox(height: 10),
 
-                          if (spaceLevels.isEmpty)
-                            const Center(
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(vertical: 8),
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                          // "No parent" option
+                          GestureDetector(
+                            onTap: () {
+                              setModalState(() {
+                                selectedParentSpace = null;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: selectedParentSpace == null
+                                    ? AppColors.primary.withValues(alpha: 0.08)
+                                    : AppColors.background,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: selectedParentSpace == null
+                                      ? AppColors.primary
+                                      : AppColors.divider.withValues(alpha: 0.5),
+                                  width: selectedParentSpace == null ? 1.5 : 1,
                                 ),
                               ),
-                            )
-                          else ...[
-                            // "No parent" option
-                            GestureDetector(
-                              onTap: () {
-                                setModalState(() {
-                                  // Clear all selections
-                                  for (int i = 0; i < selectedAtLevel.length; i++) {
-                                    selectedAtLevel[i] = null;
-                                  }
-                                  // Keep only the first level
-                                  if (spaceLevels.length > 1) {
-                                    spaceLevels = spaceLevels.sublist(0, 1);
-                                    selectedAtLevel = selectedAtLevel.sublist(0, 1);
-                                    loadingAtLevel = loadingAtLevel.sublist(0, 1);
-                                  }
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(
-                                  color: getSelectedParentId() == null
-                                      ? AppColors.primary.withValues(alpha: 0.08)
-                                      : AppColors.background,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: getSelectedParentId() == null
-                                        ? AppColors.primary
-                                        : AppColors.divider.withValues(alpha: 0.5),
-                                    width: getSelectedParentId() == null ? 1.5 : 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Text('🌐', style: TextStyle(fontSize: 16)),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'Fără părinte (locație principală)',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: getSelectedParentId() == null ? FontWeight.w600 : FontWeight.w400,
-                                          color: getSelectedParentId() == null ? AppColors.primary : AppColors.textSecondary,
-                                        ),
+                              child: Row(
+                                children: [
+                                  const Text('🌐', style: TextStyle(fontSize: 16)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Fără părinte (locație principală)',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: selectedParentSpace == null ? FontWeight.w600 : FontWeight.w400,
+                                        color: selectedParentSpace == null ? AppColors.primary : AppColors.textSecondary,
                                       ),
                                     ),
-                                    if (getSelectedParentId() == null)
-                                      const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 18),
-                                  ],
-                                ),
+                                  ),
+                                  if (selectedParentSpace == null)
+                                    const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 18),
+                                ],
                               ),
                             ),
+                          ),
 
-                            // Cascading dropdowns for each level
-                            for (int level = 0; level < spaceLevels.length; level++) ...[
-                              if (level > 0) const SizedBox(height: 12),
-                              Text(
-                                level == 0 ? 'Spațiu principal' : 'Sub-spațiu nivel $level',
-                                style: const TextStyle(
-                                  color: AppColors.textHint,
-                                  fontSize: 12,
-                                ),
+                          // SpacePickerWidget
+                          SpacePickerWidget(
+                            initialValue: selectedParentSpace,
+                            onChanged: (space) {
+                              setModalState(() {
+                                selectedParentSpace = space;
+                              });
+                            },
+                          ),
+
+                          // Display selected path
+                          if (selectedParentSpace != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
                               ),
-                              const SizedBox(height: 6),
-                              if (loadingAtLevel[level])
-                                Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.background,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
-                                  ),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
-                                      SizedBox(width: 12),
-                                      Text('Se încarcă sub-spațiile...', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                                    ],
-                                  ),
-                                )
-                              else if (spaceLevels[level].isEmpty)
-                                Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.background,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
-                                  ),
-                                  child: const Row(
-                                    children: [
-                                      Icon(Icons.info_outline_rounded, color: AppColors.textHint, size: 18),
-                                      SizedBox(width: 10),
-                                      Text('Nu există sub-spații la acest nivel', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                                    ],
-                                  ),
-                                )
-                              else
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.background,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: DropdownButtonHideUnderline(
-                                          child: DropdownButton<_SpaceOptionItem>(
-                                            value: selectedAtLevel[level],
-                                            hint: Text(
-                                              level == 0 ? 'Selectează spațiul principal...' : 'Selectează sub-spațiul...',
-                                              style: const TextStyle(color: AppColors.textHint, fontSize: 14),
-                                            ),
-                                            isExpanded: true,
-                                            borderRadius: BorderRadius.circular(14),
-                                            dropdownColor: AppColors.surface,
-                                            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textHint),
-                                            items: spaceLevels[level].map((space) {
-                                              return DropdownMenuItem<_SpaceOptionItem>(
-                                                value: space,
-                                                child: Row(
-                                                  children: [
-                                                    Text(space.emoji, style: const TextStyle(fontSize: 18)),
-                                                    const SizedBox(width: 10),
-                                                    Expanded(
-                                                      child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                        mainAxisSize: MainAxisSize.min,
-                                                        children: [
-                                                          Text(
-                                                            space.name,
-                                                            style: const TextStyle(
-                                                              fontSize: 14,
-                                                              fontWeight: FontWeight.w500,
-                                                              color: AppColors.textPrimary,
-                                                            ),
-                                                          ),
-                                                          if (space.childrenCount > 0)
-                                                            Text(
-                                                              '${space.childrenCount} sub-spații',
-                                                              style: const TextStyle(fontSize: 11, color: AppColors.textHint),
-                                                            ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            }).toList(),
-                                            onChanged: (_SpaceOptionItem? space) {
-                                              final currentLevel = level;
-                                              setModalState(() {
-                                                selectedAtLevel[currentLevel] = space;
-                                                // Remove all levels below this one
-                                                if (spaceLevels.length > currentLevel + 1) {
-                                                  spaceLevels = spaceLevels.sublist(0, currentLevel + 1);
-                                                  selectedAtLevel = selectedAtLevel.sublist(0, currentLevel + 1);
-                                                  loadingAtLevel = loadingAtLevel.sublist(0, currentLevel + 1);
-                                                }
-                                              });
-                                              // If the selected space has children, load the next level
-                                              if (space != null && space.childrenCount > 0) {
-                                                loadChildrenAtLevel(currentLevel + 1, space.id);
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                      if (level > 0 && selectedAtLevel[level] != null)
-                                        GestureDetector(
-                                          onTap: () {
-                                            final currentLevel = level;
-                                            setModalState(() {
-                                              selectedAtLevel[currentLevel] = null;
-                                              if (spaceLevels.length > currentLevel + 1) {
-                                                spaceLevels = spaceLevels.sublist(0, currentLevel + 1);
-                                                selectedAtLevel = selectedAtLevel.sublist(0, currentLevel + 1);
-                                                loadingAtLevel = loadingAtLevel.sublist(0, currentLevel + 1);
-                                              }
-                                            });
-                                          },
-                                          child: const Padding(
-                                            padding: EdgeInsets.only(left: 4),
-                                            child: Icon(Icons.close_rounded, color: AppColors.textHint, size: 20),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-
-                            // Display selected path
-                            if (getSelectedParentId() != null) ...[
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 18),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'Părinte: ${getSelectedSpacePath()}',
-                                        style: const TextStyle(
-                                          color: AppColors.primary,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Părinte: ${selectedParentSpace!.fullPath ?? selectedParentSpace!.name}',
+                                      style: const TextStyle(
+                                        color: AppColors.primary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ],
 
                           const SizedBox(height: 16),
@@ -1016,7 +807,7 @@ class _SpacesViewState extends State<_SpacesView> {
                               bloc.add(CreateSpaceEvent(
                                 name: nameController.text.trim(),
                                 type: selectedType,
-                                parentSpaceId: getSelectedParentId(),
+                                parentSpaceId: selectedParentSpace?.id,
                               ));
                               Navigator.pop(ctx);
                             },
@@ -1035,11 +826,12 @@ class _SpacesViewState extends State<_SpacesView> {
                   ),
                 ],
               ),
-            ),
-          );
-        },
-      ),
-    );
+            )
+            );
+          },
+        ),
+      );
+    }
   }
 
   // ─── EDIT SPACE DIALOG ───────────────────────────────────────
@@ -1242,8 +1034,9 @@ class _SpacesViewState extends State<_SpacesView> {
           ),
         ),
       ),
-    );
-  }
+      );
+    }
+
 
   // ─── DELETE CONFIRMATION ─────────────────────────────────────
   void _showDeleteConfirmation(BuildContext context, Space space) {
@@ -1375,7 +1168,7 @@ class _SpacesViewState extends State<_SpacesView> {
       });
     });
   }
-}
+
 
 // ═══════════════════════════════════════════════════════════════════
 // REUSABLE WIDGETS
