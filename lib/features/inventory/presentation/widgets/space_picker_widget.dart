@@ -217,8 +217,6 @@ class _SpacePickerWidgetState extends State<SpacePickerWidget> {
         return const Color(0xFFFF9800);
       case SpaceType.storage:
         return const Color(0xFF9C27B0);
-      case SpaceType.other:
-        return const Color(0xFF607D8B);
     }
   }
 
@@ -232,8 +230,6 @@ class _SpacePickerWidgetState extends State<SpacePickerWidget> {
         return 'Cameră';
       case SpaceType.storage:
         return 'Depozit';
-      case SpaceType.other:
-        return 'Altele';
     }
   }
 

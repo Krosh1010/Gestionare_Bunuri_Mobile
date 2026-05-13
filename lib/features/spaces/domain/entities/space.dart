@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-enum SpaceType { home, office, room, storage, other }
+enum SpaceType { home, office, room, storage }
 
 class Space extends Equatable {
   final int id;
@@ -31,8 +31,6 @@ class Space extends Equatable {
         return 'Cameră';
       case SpaceType.storage:
         return 'Depozit';
-      case SpaceType.other:
-        return 'Altele';
     }
   }
 
@@ -46,8 +44,6 @@ class Space extends Equatable {
         return '🚪';
       case SpaceType.storage:
         return '📦';
-      case SpaceType.other:
-        return '📍';
     }
   }
 

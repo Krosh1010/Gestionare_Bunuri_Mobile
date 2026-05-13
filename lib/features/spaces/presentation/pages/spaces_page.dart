@@ -266,13 +266,7 @@ class _SpacesViewState extends State<_SpacesView> {
                 isSelected: selectedType == SpaceType.storage,
                 onTap: () => context.read<SpacesBloc>().add(const FilterByType(SpaceType.storage)),
               ),
-              const SizedBox(width: 8),
-              _TypeChip(
-                label: 'Altele',
-                emoji: '📍',
-                isSelected: selectedType == SpaceType.other,
-                onTap: () => context.read<SpacesBloc>().add(const FilterByType(SpaceType.other)),
-              ),
+
             ],
           ),
         );
@@ -1378,8 +1372,6 @@ class _SpaceCard extends StatelessWidget {
         return const Color(0xFF10B981);
       case SpaceType.storage:
         return const Color(0xFF764BA2);
-      case SpaceType.other:
-        return const Color(0xFFEF4444);
     }
   }
 }

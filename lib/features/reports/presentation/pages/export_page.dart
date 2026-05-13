@@ -71,6 +71,7 @@ class _ExportPageState extends State<ExportPage> {
     'Value',
     'SpaceName',
     'PurchaseDate',
+    'Barcode',
     'WarrantyStartDate',
     'WarrantyEndDate',
     'WarrantyStatus',
@@ -90,6 +91,7 @@ class _ExportPageState extends State<ExportPage> {
     'Value': 'Valoare',
     'SpaceName': 'Spațiu',
     'PurchaseDate': 'Data achiziției',
+    'Barcode': 'Cod de bare',
     'WarrantyStartDate': 'Început garanție',
     'WarrantyEndDate': 'Sfârșit garanție',
     'WarrantyStatus': 'Status garanție',
@@ -109,6 +111,7 @@ class _ExportPageState extends State<ExportPage> {
     'Value': Icons.attach_money_rounded,
     'SpaceName': Icons.place_rounded,
     'PurchaseDate': Icons.calendar_today_rounded,
+    'Barcode': Icons.qr_code_rounded,
     'WarrantyStartDate': Icons.event_rounded,
     'WarrantyEndDate': Icons.event_busy_rounded,
     'WarrantyStatus': Icons.verified_rounded,
@@ -540,7 +543,7 @@ class _ExportPageState extends State<ExportPage> {
   Widget _buildColumnSelector() {
     // Group columns logically
     final groups = <String, List<String>>{
-      'General': ['Name', 'Description', 'Category', 'Value', 'SpaceName', 'PurchaseDate'],
+      'General': ['Name', 'Description', 'Category', 'Value', 'SpaceName', 'PurchaseDate', 'Barcode'],
       'Garanție': [
         'WarrantyStartDate',
         'WarrantyEndDate',

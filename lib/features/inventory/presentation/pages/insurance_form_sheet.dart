@@ -71,7 +71,7 @@ class _InsuranceFormSheetState extends State<InsuranceFormSheet> {
             _selectedSpace = SelectedSpace(
               id: spaceId,
               name: spaceName ?? 'Spațiu #$spaceId',
-              type: SpaceType.other,
+              type: SpaceType.storage,
               fullPath: spaceName,
             );
           }

@@ -23,7 +23,7 @@ class SpaceModel extends Space {
         case 3:
           return SpaceType.storage;
         default:
-          return SpaceType.other;
+          return SpaceType.storage;
       }
     }
     final str = type?.toString().toLowerCase() ?? '';
@@ -37,7 +37,7 @@ class SpaceModel extends Space {
       case 'storage':
         return SpaceType.storage;
       default:
-        return SpaceType.other;
+        return SpaceType.storage;
     }
   }
 
@@ -51,8 +51,6 @@ class SpaceModel extends Space {
         return 2;
       case SpaceType.storage:
         return 3;
-      case SpaceType.other:
-        return 4;
     }
   }
 

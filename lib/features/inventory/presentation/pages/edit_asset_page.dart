@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -53,7 +54,7 @@ class _EditAssetPageState extends State<EditAssetPage> {
       _selectedSpace = SelectedSpace(
         id: widget.asset.spaceId!,
         name: widget.asset.spaceName ?? '',
-        type: SpaceType.other, // Will be resolved by the picker when opened
+        type: SpaceType.storage, // Will be resolved by the picker when opened
         fullPath: widget.asset.spaceName,
       );
     }
@@ -192,9 +193,16 @@ class _EditAssetPageState extends State<EditAssetPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
+        String errorMsg = 'Eroare la actualizare: $e';
+        if (e is DioException) {
+          final msg = (e.response?.data as Map<String, dynamic>?)?['message'];
+          if (msg == 'Barcode already in use.') {
+            errorMsg = 'Codul de bare este deja folosit de alt bun!';
+          }
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Eroare la actualizare: $e'),
+            content: Text(errorMsg),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

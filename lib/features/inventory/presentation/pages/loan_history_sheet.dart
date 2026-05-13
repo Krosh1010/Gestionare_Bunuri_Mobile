@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/inventory_repository.dart';
@@ -222,29 +225,96 @@ class _LoanHistorySheetState extends State<LoanHistorySheet> {
   }
 }
 
-class _LoanHistoryCard extends StatelessWidget {
+class _LoanHistoryCard extends StatefulWidget {
   final Map<String, dynamic> loan;
   final VoidCallback onDelete;
 
   const _LoanHistoryCard({required this.loan, required this.onDelete});
 
   @override
+  State<_LoanHistoryCard> createState() => _LoanHistoryCardState();
+}
+
+class _LoanHistoryCardState extends State<_LoanHistoryCard> {
+  static const _fileChannel = MethodChannel('com.example.gestionare_bunuri_mobile/file_handler');
+  final Set<int> _downloadingIds = {};
+
+  String _getMimeType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf': return 'application/pdf';
+      case 'doc': return 'application/msword';
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls': return 'application/vnd.ms-excel';
+      case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'png': return 'image/png';
+      case 'txt': return 'text/plain';
+      default: return 'application/octet-stream';
+    }
+  }
+
+  Future<void> _downloadDocument(int docId, String fileName) async {
+    setState(() => _downloadingIds.add(docId));
+    try {
+      final bytes = await sl<InventoryRepository>().downloadLoanDocument(docId);
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/$fileName';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes, flush: true);
+      final mimeType = _getMimeType(fileName);
+      await _fileChannel.invokeMethod('saveAndOpenFile', {
+        'filePath': filePath,
+        'fileName': fileName,
+        'mimeType': mimeType,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fișierul a fost salvat: $fileName'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Eroare la descărcare: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _downloadingIds.remove(docId));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final loan = widget.loan;
     final dateFmt = DateFormat('dd.MM.yyyy');
     final isActive = loan['isActive'] as bool? ?? false;
 
-    String _fmtDate(String? raw) {
+    String fmtDate(String? raw) {
       if (raw == null) return '—';
       final dt = DateTime.tryParse(raw);
       return dt != null ? dateFmt.format(dt) : '—';
     }
 
-    final loanedAt = _fmtDate(loan['loanedAt'] as String?);
-    final returnedAt = _fmtDate(loan['returnedAt'] as String?);
+    final loanedAt = fmtDate(loan['loanedAt'] as String?);
+    final returnedAt = fmtDate(loan['returnedAt'] as String?);
     final condition = loan['condition'] as String? ?? '—';
     final conditionOnReturn = loan['conditionOnReturn'] as String?;
     final notes = loan['notes'] as String?;
     final loanedToName = loan['loanedToName'] as String? ?? '—';
+    final documents = (loan['documents'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
 
     return Container(
       decoration: BoxDecoration(
@@ -294,7 +364,7 @@ class _LoanHistoryCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               GestureDetector(
-                onTap: onDelete,
+                onTap: widget.onDelete,
                 child: Container(
                   width: 30,
                   height: 30,
@@ -339,6 +409,74 @@ class _LoanHistoryCard extends StatelessWidget {
               ],
             ],
           ),
+          // Documents section
+          if (documents.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Divider(height: 1, color: AppColors.divider),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.attach_file_rounded, color: AppColors.textHint, size: 14),
+                const SizedBox(width: 4),
+                const Text(
+                  'Documente',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textHint,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ...documents.map((doc) {
+              final docId = doc['id'] as int;
+              final fileName = doc['fileName'] as String? ?? 'document';
+              final isDownloading = _downloadingIds.contains(docId);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.insert_drive_file_outlined,
+                        color: AppColors.primary, size: 15),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        fileName,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.textSecondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: isDownloading
+                          ? null
+                          : () => _downloadDocument(docId, fileName),
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: isDownloading
+                            ? const Padding(
+                                padding: EdgeInsets.all(6),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                ),
+                              )
+                            : const Icon(Icons.download_rounded,
+                                color: AppColors.primary, size: 16),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
           if (notes != null && notes.isNotEmpty) ...[
             const SizedBox(height: 8),
             Row(

@@ -22,7 +22,6 @@ class FcmService {
   static const String _fcmTokenKey = 'fcm_device_token';
   static const String _baseUrl = 'http://192.168.1.6:5288/api';
 
-  /// Notification channel pentru Android
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'asset_guard_notifications',
     'Asset Guard Notifications',
@@ -40,7 +39,7 @@ class FcmService {
           ?.createNotificationChannel(_channel);
     }
 
-    // Inițializează local notifications pentru foreground
+    // Inițializează local notifications pentru foreground,
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
     const darwinSettings = DarwinInitializationSettings(

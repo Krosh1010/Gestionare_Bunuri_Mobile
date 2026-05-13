@@ -37,7 +37,6 @@ class StatusStatsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top colored border
           Container(
             height: 4,
             color: topBorderColor,
